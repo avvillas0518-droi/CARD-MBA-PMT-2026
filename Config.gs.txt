@@ -1,0 +1,48 @@
+/**
+ * CARD MBA - PMT 2026 Global System Configuration
+ */
+const PMT_CONFIG = {
+  ORGANIZATION: 'CARD Mutual Benefit Association, Inc.',
+  SYSTEM_NAME: 'Program Monitoring Tool (PMT) 2026',
+
+  SHEETS: {
+    WORKING_PAPER: 'Working_Paper',
+    AMLA_FINDINGS: 'AMLA Findings For Compliance T',
+    FINDINGS_MASTER: 'FINDINGS',
+    PROCEDURES: 'Monitoring Procedures',
+    DROPDOWNS: 'Dropdowns',
+    TEAM: 'Monitoring Team',
+    MONITORING_TEAM: 'Monitoring Team', // Added alias to support ReportingService
+    SUMMARY_FINDINGS: 'Summary of Findings Final',
+    SUMMARY_AMLA: 'Summary of AMLA Findings',
+    SUMMARY_DEMERITS: 'Summary of Demerits',
+    DASHBOARD: 'Executive Dashboard',
+    RISK_MATRIX: 'Table of Likelihood and Impact',
+    EMAIL_REGISTRY: 'EMAIL'
+  },
+
+  DEFAULT_DEPARTMENTS: [
+    'Compliance',
+    'Accounting',
+    'Claims',
+    'Underwriting',
+    'IT',
+    'DCC',
+    'BOAT',
+    'MBA Coordinator',
+    'Accounts & Records',
+    'Personnel File'
+  ],
+
+  AMLA_RULES: {
+    'Old Form APK': { severity: 'Moderate', demerits: 100 },
+    'Incorrect Information (Members/Legal Dependents/Beneficiaries)': { severity: 'Major', demerits: 200 },
+    'Incomplete Information (APK vs. CMS)': { severity: 'Major', demerits: 200 },
+    'No APK': { severity: 'Major', demerits: 200 },
+    'Unencoded/Un-uploaded/Unverified APK': { severity: 'Major', demerits: 200 },
+    'No proof of birth': { severity: 'Moderate', demerits: 100 },
+    'Incomplete signatures in the APK': { severity: 'Moderate', demerits: 100 }
+  },
+
+  STAFF_ROLES: ['PM', 'CO', 'BK', 'CP', 'IP']
+};

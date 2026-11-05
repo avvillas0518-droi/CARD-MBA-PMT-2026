@@ -1,0 +1,331 @@
+/**
+ * CARD MBA PMT 2026 - Master Parameter Seeder
+ * Populates Dropdowns, Master Findings, and Office Hierarchy
+ */
+
+function seedDropdownsAndFindings() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. Setup 'FINDINGS' Sheet (Department -> Finding)
+  let fSheet = ss.getSheetByName('FINDINGS');
+  if (!fSheet) fSheet = ss.insertSheet('FINDINGS');
+  fSheet.clear();
+  fSheet.appendRow(['Department / Particular', 'Standardized Finding', 'Status']);
+  fSheet.getRange('A1:C1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+
+  const findingsData = [
+    // COMPLIANCE AND RISK
+    ['COMPLIANCE AND RISK', 'Failure to secure Business Permits/ Licenses and other Regulatory Decals'],
+    ['COMPLIANCE AND RISK', 'Failure to display latest Business Permits/Licenses'],
+    ['COMPLIANCE AND RISK', 'Failure to secure/submit regulatory reports on time (e.g. payment of DST)'],
+    ['COMPLIANCE AND RISK', 'Failure to file regulatory reports submitted'],
+    ['COMPLIANCE AND RISK', 'Missing regulatory documents'],
+    ['COMPLIANCE AND RISK', 'Failure to comply with the Regulatory Inspection Findings/Concern'],
+    ['COMPLIANCE AND RISK', 'Late compliance with Regulatory Inspection Findings/Concern'],
+    ['COMPLIANCE AND RISK', 'Failure to report Regulatory Inspection Findings/Concern'],
+    ['COMPLIANCE AND RISK', 'Failure to upload regulatory reports on the regulatory link'],
+    ['COMPLIANCE AND RISK', 'Failure to renew registration of service vehicle to LTO'],
+    ['COMPLIANCE AND RISK', 'Unregistered service vehicle with complete registration documents'],
+    ['COMPLIANCE AND RISK', 'Failure to update comprehensive insurance of service vehicle'],
+    ['COMPLIANCE AND RISK', 'Unremitted CTPL premium / Late payment of CTPL premium'],
+    ['COMPLIANCE AND RISK', 'Failure to secure valid and latest franchise of the service vehicle'],
+    ['COMPLIANCE AND RISK', 'Failure to monitor valid driving license of driver / coordinator'],
+    ['COMPLIANCE AND RISK', 'Failure to file updated CTPL policy'],
+    ['COMPLIANCE AND RISK', 'Failure to update Comprehensive insurance coverage'],
+    ['COMPLIANCE AND RISK', 'Non-submission of quarterly AMLA compliance report'],
+    ['COMPLIANCE AND RISK', 'Unencoded / Incomplete details encoded in the AMLA link'],
+    ['COMPLIANCE AND RISK', 'Non-submission / Incomplete CTR/STR to AMLC'],
+    ['COMPLIANCE AND RISK', 'No designated AMLA Compliance Officer'],
+    ['COMPLIANCE AND RISK', 'Non-attendance to annual AMLA Training'],
+    ['COMPLIANCE AND RISK', 'Delayed submission of Minutes of the Meeting / Board Resolution'],
+    ['COMPLIANCE AND RISK', 'Failure to submit / file Board Approved policies and guidelines'],
+    ['COMPLIANCE AND RISK', 'Non-compliance to statutory requirements (BIR, SEC, IC, DOLE, LGU, etc.)'],
+    ['COMPLIANCE AND RISK', 'Others Compliance & Risk'],
+
+    // ACCOUNTING
+    ['ACCOUNTING', 'Overlapping of Cash Advance ( Intentional)'],
+    ['ACCOUNTING', 'Overlapping of Cash Advance ( Un-intentional)'],
+    ['ACCOUNTING', 'Late liquidation of Cash Advance ( Intentional)'],
+    ['ACCOUNTING', 'Late liquidation of Cash Advance ( Un-intentional)'],
+    ['ACCOUNTING', 'Exceeding Cash Advance as per policy'],
+    ['ACCOUNTING', 'Misappropriation of cash (e.g. padding of receipts)'],
+    ['ACCOUNTING', 'Unjustified excess cash in bank balance'],
+    ['ACCOUNTING', 'Failure to maintain sufficient balance in the checking account'],
+    ['ACCOUNTING', 'Misappropriation of Supplies'],
+    ['ACCOUNTING', 'Unreconciled Supplies Inventory'],
+    ['ACCOUNTING', 'Un-recorded transactions in the CAS / CMS'],
+    ['ACCOUNTING', 'Late recording of transaction in the CAS / CMS'],
+    ['ACCOUNTING', 'Inaccurate recording of transaction in CAS / CMS'],
+    ['ACCOUNTING', 'Missing / Incomplete supporting documents on disbursements'],
+    ['ACCOUNTING', 'Un-signed checks / vouchers by authorized signatories'],
+    ['ACCOUNTING', 'Delayed preparation / Non-submission of Bank Reconciliation Statement'],
+    ['ACCOUNTING', 'Unadjusted / Stale check / Outstanding check beyond 6 months'],
+    ['ACCOUNTING', 'Unliquidated petty cash fund / operating fund upon replenishment'],
+    ['ACCOUNTING', 'Delayed remittance of collection to bank'],
+    ['ACCOUNTING', 'Un-reconciled inter-branch / inter-office transactions'],
+    ['ACCOUNTING', 'Unremitted taxes / government dues (Withholding Tax, SSS, PhilHealth, Pag-IBIG)'],
+    ['ACCOUNTING', 'Delayed submission of monthly financial statements & schedules'],
+    ['ACCOUNTING', 'Missing / Unused Official Receipts booklet not properly surrendered'],
+    ['ACCOUNTING', 'Discrepancy in actual inventory vs CAS records'],
+    ['ACCOUNTING', 'Others Accounting'],
+
+    // CLAIMS
+    ['CLAIMS', 'Non-compliance with 8-24 Strategy on claims settlement'],
+    ['CLAIMS', 'Over disbursement of claims/refund'],
+    ['CLAIMS', 'Under disbursement of claims/refund'],
+    ['CLAIMS', 'Payment of claims with incomplete documents'],
+    ['CLAIMS', 'Tampering of date notification and date validation in the claims form'],
+    ['CLAIMS', 'Long due pending claims without action taken'],
+    ['CLAIMS', 'Filed TPD application without final decision on the 5th month'],
+    ['CLAIMS', 'Failure to encode claims in the CMS'],
+    ['CLAIMS', 'Failure to put remarks on CMS for the denied claims'],
+    ['CLAIMS', 'Incomplete filing of claims documents'],
+    ['CLAIMS', 'Un-notified claims beyond standard turnaround time'],
+    ['CLAIMS', 'Discrepancy in beneficiary details in claims form vs. Masterfile'],
+    ['CLAIMS', 'Processed / Paid claims without Certificate of Free from Arrears'],
+    ['CLAIMS', 'Delayed release of check / claims proceeds to beneficiaries'],
+    ['CLAIMS', 'Missing valid ID of claimant / beneficiary attached to voucher'],
+    ['CLAIMS', 'Non-submission / delayed submission of validated claims to Head Office'],
+    ['CLAIMS', 'Failure to tag claims status properly in CMS'],
+    ['CLAIMS', 'Paid claims under contestable period without thorough investigation'],
+    ['CLAIMS', 'Unreleased claims check expired / stale in office vault'],
+    ['CLAIMS', 'Others Claims'],
+
+    // UNDERWRITING
+    ['UNDERWRITING', 'Failure to distribute COM/CoC'],
+    ['UNDERWRITING', 'Late Distribution of COM/CoC'],
+    ['UNDERWRITING', 'Incomplete information in the APK vs CMS'],
+    ['UNDERWRITING', 'No signature in the APK vs CMS'],
+    ['UNDERWRITING', 'Inaccurate information in the APK vs CMS'],
+    ['UNDERWRITING', 'Failure to encode/upload/verify APK in the CMS'],
+    ['UNDERWRITING', 'Failure to file Valid ID of member with APK'],
+    ['UNDERWRITING', 'Incomplete filing of application forms (APK, GLIP, Katuparan, RPP)'],
+    ['UNDERWRITING', 'Failure to distribute Liham-Paalala'],
+    ['UNDERWRITING', 'Late Distribution of Liham-Paalala'],
+    ['UNDERWRITING', 'No proof of birth of member / dependent in the records'],
+    ['UNDERWRITING', 'Over-aged members accepted without special board approval'],
+    ['UNDERWRITING', 'Acceptance of member with pre-existing exclusions without medical memo'],
+    ['UNDERWRITING', 'Failure to validate member’s legal beneficiaries'],
+    ['UNDERWRITING', 'Un-updated member data (change in civil status, beneficiaries)'],
+    ['UNDERWRITING', 'Delayed endorsement of application documents to CMS team'],
+    ['UNDERWRITING', 'Underwriting validation backlog beyond 30 days'],
+    ['UNDERWRITING', 'Missing Marriage Certificate for married dependents'],
+    ['UNDERWRITING', 'Incomplete validation stamps / signatures of Underwriting Specialist'],
+    ['UNDERWRITING', 'Double enrollment of member under multiple Provincial Offices'],
+    ['UNDERWRITING', 'Failure to conduct 100% pre-underwriting audit on new units'],
+    ['UNDERWRITING', 'Mismatched date of entry between partner MFI and CARD MBA'],
+    ['UNDERWRITING', 'Unencoded dependent details resulting to denied validation'],
+    ['UNDERWRITING', 'Acceptance of ineligible common-law spouse without Affidavit'],
+    ['UNDERWRITING', 'Failure to issue Certificate of Coverage on micro-insurance additions'],
+    ['UNDERWRITING', 'Un-cancelled policies for resigned / terminated members'],
+    ['UNDERWRITING', 'Failure to reconcile CMS active database vs Partner institution roster'],
+    ['UNDERWRITING', 'Missing APK logbook tracker at Provincial Office'],
+    ['UNDERWRITING', 'Others Underwriting'],
+
+    // IT
+    ['IT', 'Failure to deactivate account'],
+    ['IT', 'Failure to update User Account'],
+    ['IT', 'Sharing of Accounts/Passwords'],
+    ['IT', 'Storing personal or unofficial files in workstation'],
+    ['IT', 'Browsing of prohibited websites'],
+    ['IT', 'Incomplete lockdown configuration'],
+    ['IT', 'Failure to update or install antivirus'],
+    ['IT', 'Non compliance to the back up retention policy'],
+    ['IT', 'Firewall Misconfiguration (Policy Related) -allows unrestricted web access, allows unauthorized device to connect to the network.'],
+    ['IT', 'Allowing unauthorized user to connect to MBA network (Firewall Misconfiguration)'],
+    ['IT', 'Unsecured network equipment / Server rack left unlocked'],
+    ['IT', 'Unlicensed / Pirated software found in branch workstations'],
+    ['IT', 'Failure to change default admin password of network router/switch'],
+    ['IT', 'Un-encrypted USB flash drives / external media used on office systems'],
+    ['IT', 'Failure to submit quarterly IT asset inventory report'],
+    ['IT', 'Defective UPS units not reported / battery failing to provide graceful shutdown'],
+    ['IT', 'Delayed reporting of security incidents / virus infections to CISO'],
+    ['IT', 'Others IT'],
+
+    // DCC
+    ['DCC', 'Unuploaded Customized back-up'],
+    ['DCC', 'Incomplete Customized back-up'],
+    ['DCC', 'Failure to maintain onsite/offsite back-up'],
+    ['DCC', 'Late/Incomplete Submission of Offsite Backup'],
+    ['DCC', 'Wrong input of password of Onsite/Offsite BackUp'],
+    ['DCC', 'PO Back-up not encrypted'],
+    ['DCC', 'Late/Failure to save Onsite backup'],
+    ['DCC', 'Others DCC'],
+
+    // BOAT
+    ['BOAT', 'Incomplete BOAT Report'],
+    ['BOAT', 'Inaccurate BOAT Report'],
+    ['BOAT', 'Unreconciled Remittance'],
+    ['BOAT', 'Failure to file Weekly Remittance Report'],
+    ['BOAT', 'Un-updated Membership'],
+    ['BOAT', 'Over disbursement of claims/refund - BOAT'],
+    ['BOAT', 'Under disbursement of claims/refund - BOAT'],
+    ['BOAT', 'Long due pending claims without action taken - BOAT'],
+    ['BOAT', 'Failure renewal of MOA'],
+    ['BOAT', 'Failure to upload payment in CMS for BOAT Members'],
+    ['BOAT', 'Uncollected administrative fees / loading fees'],
+    ['BOAT', 'Others BOAT'],
+
+    // MBA COORDINATOR
+    ['MBA COORDINATOR', 'Unremitted/Late remittance of premium'],
+    ['MBA COORDINATOR', 'Unable/Unupdated policy of Sagip & CARD Care in CMS of MBA Coordinator'],
+    ['MBA COORDINATOR', 'Failure to enroll coordinator to insurance'],
+    ['MBA COORDINATOR', 'Failure to file MBA coordinators profile & attachment'],
+    ['MBA COORDINATOR', 'Outdated form of Profile and Kasunduan for MBA Coordinator'],
+    ['MBA COORDINATOR', 'Incomplete details of MBA coordinators profile & attachment'],
+    ['MBA COORDINATOR', 'Unencoded MBA coordinators profile in CMS'],
+    ['MBA COORDINATOR', 'Failure to untagged resigned MBA Coordinator in CMS'],
+    ['MBA COORDINATOR', 'Inaccurate details in MBA Coordinator\'s Profile vs CMS'],
+    ['MBA COORDINATOR', 'Incomplete filing of MBA Coordinator monthly Report'],
+    ['MBA COORDINATOR', 'Failure to attend monthly coordination meeting'],
+    ['MBA COORDINATOR', 'Delayed release of MBA Coordinator allowance / honorarium'],
+    ['MBA COORDINATOR', 'Discrepancy in active coordinator masterlist vs actual branch roster'],
+    ['MBA COORDINATOR', 'Unsigned MOA / Kasunduan between CARD MBA and Coordinator'],
+    ['MBA COORDINATOR', 'Failure to provide required basic orientation to new Coordinator'],
+    ['MBA COORDINATOR', 'Others MBA Coordinator'],
+
+    // ACCOUNTS AND RECORDS
+    ['ACCOUNTS AND RECORDS', 'Failure to comply to security and health protocols'],
+    ['ACCOUNTS AND RECORDS', 'Failure to attend Monday Morning Assembly'],
+    ['ACCOUNTS AND RECORDS', 'Missing filing of 201 File'],
+    ['ACCOUNTS AND RECORDS', 'Incomplete filing of 201 File'],
+    ['ACCOUNTS AND RECORDS', 'Failure to update productivity report card'],
+    ['ACCOUNTS AND RECORDS', 'Failure to update/file PM\'s Report'],
+    ['ACCOUNTS AND RECORDS', 'Failure to conduct staff weekly meeting'],
+    ['ACCOUNTS AND RECORDS', 'Unachieved monitoring target'],
+    ['ACCOUNTS AND RECORDS', 'Failure to updates logbooks (e.g. supplies, COM, etc.)'],
+    ['ACCOUNTS AND RECORDS', 'Failure to update At a Glance'],
+    ['ACCOUNTS AND RECORDS', 'Disorganized vault / archive storage of member files'],
+    ['ACCOUNTS AND RECORDS', 'Unauthorized disposal / destruction of accounting documents'],
+    ['ACCOUNTS AND RECORDS', 'Missing master key custody logbook for office safe'],
+    ['ACCOUNTS AND RECORDS', 'Others Accounts & Records'],
+
+    // PERSONNEL FILE
+    ['PERSONNEL FILE', 'No Appointment'],
+    ['PERSONNEL FILE', 'No ID'],
+    ['PERSONNEL FILE', 'No Confidentiality & Non-Disclosure Agreement/ Training Agreement'],
+    ['PERSONNEL FILE', 'No Health card (PhilCare)'],
+    ['PERSONNEL FILE', 'No Regulatory Numbers'],
+    ['PERSONNEL FILE', 'No Productivity Report Card'],
+    ['PERSONNEL FILE', 'No Updated filed APK'],
+    ['PERSONNEL FILE', 'No Filed Approved OSA/NOSA'],
+    ['PERSONNEL FILE', 'Others Personnel File']
+  ];
+
+  const findingRows = findingsData.map(item => [item[0], item[1], 'Active']);
+  fSheet.getRange(2, 1, findingRows.length, 3).setValues(findingRows);
+
+  // 2. Setup 'Dropdowns' Sheet (Config Parameters)
+  let dSheet = ss.getSheetByName('Dropdowns');
+  if (!dSheet) dSheet = ss.insertSheet('Dropdowns');
+  dSheet.clear();
+  dSheet.appendRow(['Category', 'Parameter Value', 'Status']);
+  dSheet.getRange('A1:C1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+
+  const baseDropdowns = [
+    // Status
+    ['Status', 'Open'], ['Status', 'Close'],
+
+    // AMLA Violations
+    ['AMLA', 'Old Form APK'],
+    ['AMLA', 'Incorrect Information (Members/ Legal Dependents/ Beneficiaries)'],
+    ['AMLA', 'Incomplete Information (APK VS. CMS)'],
+    ['AMLA', 'No APK'],
+    ['AMLA', 'Unencoded/Un-uploaded/Unverified APK'],
+    ['AMLA', 'No proof of birth'],
+    ['AMLA', 'Incomplete signatures in the APK'],
+
+    // Risk Event
+    ['Risk Event', 'Internal Fraud'],
+    ['Risk Event', 'External Fraud'],
+    ['Risk Event', 'Employment Practices and Workplace Safety'],
+    ['Risk Event', 'Cilents, Products, Business Practices'],
+    ['Risk Event', 'Damage to Physical Assets'],
+    ['Risk Event', 'Business Disruption and System Failures'],
+    ['Risk Event', 'Execution, Delivery and Process Management'],
+
+    // Type of Risk
+    ['Type of Risk', 'Operational Risk - Fraud'],
+    ['Type of Risk', 'Operational Risk'],
+    ['Type of Risk', 'Compliance Risk'],
+    ['Type of Risk', 'Financial Risk'],
+    ['Type of Risk', 'IT Risk'],
+    ['Type of Risk', 'Information Security Risk'],
+    ['Type of Risk', 'Governance Risk'],
+    ['Type of Risk', 'Safety and Security Risk'],
+
+    // Business Areas
+    ['Business Areas', 'COMPLIANCE & RISK'],
+    ['Business Areas', 'ACCOUNTING'],
+    ['Business Areas', 'CLAIMS'],
+    ['Business Areas', 'UNDERWRITING'],
+    ['Business Areas', 'IT'],
+    ['Business Areas', 'BOAT'],
+    ['Business Areas', 'MBA COORDINATOR'],
+    ['Business Areas', 'OTHERS'],
+    ['Business Areas', 'PERSONNEL FILE'],
+    ['Business Areas', 'DCC'],
+
+    // Products / Services
+    ['Products/ Services/Functions', 'BLIP/Optional product'],
+    ['Products/ Services/Functions', 'CMS'],
+    ['Products/ Services/Functions', 'Panatag App'],
+    ['Products/ Services/Functions', 'eProcess'],
+    ['Products/ Services/Functions', 'eTanong-Mo Chatbot'],
+    ['Products/ Services/Functions', 'Regulatory Permits/Licenses'],
+    ['Products/ Services/Functions', 'Regulatory or internal reports/requirements'],
+    ['Products/ Services/Functions', 'Financial and account management'],
+    ['Products/ Services/Functions', 'Claims management'],
+    ['Products/ Services/Functions', 'Membership/ underwriting management'],
+    ['Products/ Services/Functions', 'IT management'],
+    ['Products/ Services/Functions', 'BOAT management'],
+    ['Products/ Services/Functions', 'MBA Coordinator management'],
+    ['Products/ Services/Functions', 'Overall office management and others'],
+    ['Products/ Services/Functions', 'Human Resource management'],
+    ['Products/ Services/Functions', 'DCC management'],
+    ['Products/ Services/Functions', 'Kasapi Leaders management'],
+    ['Products/ Services/Functions', 'Document Tracking and Management System (DTMS)']
+  ];
+
+  const dropRows = baseDropdowns.map(i => [i[0], i[1], 'Active']);
+  dSheet.getRange(2, 1, dropRows.length, 3).setValues(dropRows);
+
+  // 3. Setup 'Office_Master' (All 95 Provincial Offices, Clusters, and Regions)
+  let oSheet = ss.getSheetByName('Office_Master');
+  if (!oSheet) oSheet = ss.insertSheet('Office_Master');
+  oSheet.clear();
+  oSheet.appendRow(['Region', 'Cluster', 'Provincial Office', 'Status']);
+  oSheet.getRange('A1:D1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+
+  const offices = [
+    ['Region 1', 'Luzon 1', 'Ilocos Norte'], ['Region 1', 'Luzon 1', 'Ilocos Sur 1'], ['Region 1', 'Luzon 1', 'Ilocos Sur 2'], ['Region 1', 'Luzon 1', 'La Union'],
+    ['Region 1', 'Luzon 2', 'Benguet'], ['Region 1', 'Luzon 2', 'Pangasinan 1'], ['Region 1', 'Luzon 2', 'Pangasinan 2'], ['Region 1', 'Luzon 2', 'Pangasinan 3'],
+    ['Region 1', 'Luzon 3', 'Cagayan 1'], ['Region 1', 'Luzon 3', 'Isabela'], ['Region 1', 'Luzon 3', 'Cagayan 2'], ['Region 1', 'Luzon 3', 'Nueva Vizcaya'],
+    ['Region 2', 'Luzon 4', 'Tarlac'], ['Region 2', 'Luzon 4', 'Bataan'], ['Region 2', 'Luzon 4', 'Nueva Ecija'], ['Region 2', 'Luzon 4', 'Pampanga'],
+    ['Region 2', 'Luzon 5A', 'Rizal'], ['Region 2', 'Luzon 5A', 'Bulacan'], ['Region 2', 'Luzon 5A', 'Metro Manila 2'], ['Region 2', 'Luzon 5A', 'Metro Manila 4'],
+    ['Region 2', 'Luzon 5B', 'Palawan 1'], ['Region 2', 'Luzon 5B', 'Palawan 2'], ['Region 2', 'Luzon 5B', 'Metro Manila 1'], ['Region 2', 'Luzon 5B', 'Metro Manila 3'],
+    ['Region 3', 'Luzon 6', 'Oriental Mindoro 1'], ['Region 3', 'Luzon 6', 'Oriental Mindoro 2'], ['Region 3', 'Luzon 6', 'Oriental Mindoro 3'], ['Region 3', 'Luzon 6', 'Romblon'],
+    ['Region 3', 'Luzon 7', 'Batangas 1'], ['Region 3', 'Luzon 7', 'Batangas 2'], ['Region 3', 'Luzon 7', 'Occidental Mindoro 1'], ['Region 3', 'Luzon 7', 'Occidental Mindoro 2'],
+    ['Region 3', 'Luzon 8', 'Cavite 1'], ['Region 3', 'Luzon 8', 'Cavite 2'], ['Region 3', 'Luzon 8', 'Cavite 3'], ['Region 3', 'Luzon 8', 'Batangas 4'],
+    ['Region 4', 'Luzon 9', 'Batangas 3'], ['Region 4', 'Luzon 9', 'Laguna 2'], ['Region 4', 'Luzon 9', 'Laguna 3'], ['Region 4', 'Luzon 9', 'Laguna 4'],
+    ['Region 4', 'Luzon 10', 'Laguna 1'], ['Region 4', 'Luzon 10', 'Marinduque'], ['Region 4', 'Luzon 10', 'Quezon 2'], ['Region 4', 'Luzon 10', 'Quezon 3'],
+    ['Region 4', 'Luzon 11', 'Camarines Norte'], ['Region 4', 'Luzon 11', 'Quezon 1'], ['Region 4', 'Luzon 11', 'Quezon 4'], ['Region 4', 'Luzon 11', 'Quezon 5'],
+    ['Region 5', 'Luzon 12', 'Camarines Sur 1'], ['Region 5', 'Luzon 12', 'Camarines Sur 2'], ['Region 5', 'Luzon 12', 'Camarines Sur 3'], ['Region 5', 'Luzon 12', 'Camarines Sur 4'],
+    ['Region 5', 'Luzon 13', 'Albay 1'], ['Region 5', 'Luzon 13', 'Albay 2'], ['Region 5', 'Luzon 13', 'Masbate 1'], ['Region 5', 'Luzon 13', 'Masbate 2'],
+    ['Region 5', 'Visayas 1', 'Eastern Samar'], ['Region 5', 'Visayas 1', 'Leyte 1'], ['Region 5', 'Visayas 1', 'Leyte 2'], ['Region 5', 'Visayas 1', 'Samar'],
+    ['Region 6', 'Visayas 2', 'Cebu 1'], ['Region 6', 'Visayas 2', 'Cebu 2'], ['Region 6', 'Visayas 2', 'Cebu 3'], ['Region 6', 'Visayas 2', 'Southern Leyte'],
+    ['Region 6', 'Visayas 3', 'Antique'], ['Region 6', 'Visayas 3', 'Capiz'], ['Region 6', 'Visayas 3', 'Iloilo 1'], ['Region 6', 'Visayas 3', 'Iloilo 2'],
+    ['Region 6', 'Visayas 4', 'Bohol'], ['Region 6', 'Visayas 4', 'Negros Occidental 1'], ['Region 6', 'Visayas 4', 'Negros Occidental 2'], ['Region 6', 'Visayas 4', 'Negros Oriental'],
+    ['Region 7', 'Mindanao 1', 'Davao Oriental'], ['Region 7', 'Mindanao 1', 'Davao 1'], ['Region 7', 'Mindanao 1', 'Davao 2'], ['Region 7', 'Mindanao 1', 'Davao Del Norte'],
+    ['Region 7', 'Mindanao 2', 'North Cotabato 1'], ['Region 7', 'Mindanao 2', 'South Cotabato 1'], ['Region 7', 'Mindanao 2', 'South Cotabato 2'], ['Region 7', 'Mindanao 2', 'Sultan Kudarat'],
+    ['Region 7', 'Mindanao 4', 'Davao De Oro'], ['Region 7', 'Mindanao 4', 'Agusan Del Sur'], ['Region 7', 'Mindanao 4', 'Agusan Del Norte'], ['Region 7', 'Mindanao 4', 'Surigao Del Norte'], ['Region 7', 'Mindanao 4', 'Surigao Del Sur'],
+    ['Region 8', 'Mindanao 3', 'Zamboanga Del Norte'], ['Region 8', 'Mindanao 3', 'Zamboanga Sibugay'], ['Region 8', 'Mindanao 3', 'Zamboanga Del Sur'], ['Region 8', 'Mindanao 3', 'Misamis Occidental'],
+    ['Region 8', 'Mindanao 5', 'Bukidnon'], ['Region 8', 'Mindanao 5', 'Lanao Del Norte'], ['Region 8', 'Mindanao 5', 'North Cotabato 2'], ['Region 8', 'Mindanao 5', 'Misamis Oriental'],
+    ['Region 8', 'Takaful Window Operation', 'Cotabato'], ['Region 8', 'Takaful Window Operation', 'Zamboanga Basulta']
+  ];
+
+  const officeRows = offices.map(o => [o[0], o[1], o[2], 'Active']);
+  oSheet.getRange(2, 1, officeRows.length, 4).setValues(officeRows);
+
+  return 'Master tables initialized: 177 Findings, 43 General Parameters, and 95 Provincial Offices seeded.';
+}

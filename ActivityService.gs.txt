@@ -1,0 +1,84 @@
+/**
+ * CARD MBA PMT 2026 - Monitoring Activity Engine
+ */
+
+function submitMonitoringActivity(p) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Monitoring_Activities');
+    const headers = [
+      'Activity Ref ID', 'Name of Monitoring Team', 'Date of Monitoring', 
+      'PO Monitored', 'Cluster', 'Region', 'Documents Checked', 
+      '# of Sample / Period', 'Unit / BOAT', 'Center 1', 'Center 2', 
+      'Center 3', 'Center 4', 'Memos Discussed to PO Staff', 
+      'Other Activities', 'Timestamp'
+    ];
+
+    if (!sheet) {
+      sheet = ss.insertSheet('Monitoring_Activities');
+      sheet.appendRow(headers);
+      sheet.getRange('A1:P1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+
+    const refId = 'ACT-' + Utilities.formatDate(new Date(), 'GMT+8', 'yyyy') + '-' + Math.floor(1000 + Math.random() * 9000);
+    
+    // Multi-select document conversion
+    const docList = Array.isArray(p.documentsChecked) ? p.documentsChecked.join(', ') : (p.documentsChecked || '');
+
+    sheet.appendRow([
+      refId,
+      p.monitoringTeam || '',
+      p.dateMonitoring ? new Date(p.dateMonitoring) : new Date(),
+      p.poMonitored || '',
+      p.cluster || '',
+      p.region || '',
+      docList,
+      p.sampleSizePeriod || '',
+      p.unitBoat || '',
+      p.center1 || '',
+      p.center2 || '',
+      p.center3 || '',
+      p.center4 || '',
+      p.memosDiscussed || '',
+      p.otherActivities || '',
+      new Date()
+    ]);
+
+    return { success: true, refId: refId };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getMonitoringActivitiesList() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Monitoring_Activities');
+    if (!sheet || sheet.getLastRow() < 2) return { success: true, activities: [] };
+
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getValues();
+    const activities = rows.map(r => ({
+      refId: r[0],
+      monitoringTeam: r[1],
+      dateMonitoring: r[2] instanceof Date ? Utilities.formatDate(r[2], 'GMT+8', 'yyyy-MM-dd') : String(r[2]),
+      po: r[3],
+      cluster: r[4],
+      region: r[5],
+      documentsChecked: r[6],
+      sampleSizePeriod: r[7],
+      unitBoat: r[8],
+      centers: [r[9], r[10], r[11], r[12]].filter(Boolean).join(', '),
+      memosDiscussed: r[13],
+      otherActivities: r[14]
+    })).reverse();
+
+    return { success: true, activities: activities };
+  } catch (err) {
+    return { success: false, message: err.toString(), activities: [] };
+  }
+}

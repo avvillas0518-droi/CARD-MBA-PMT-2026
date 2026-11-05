@@ -1,0 +1,304 @@
+/**
+ * CARD MBA PMT 2026 - Authentication & User Directory Provider
+ */
+
+function authenticateUser(credentials) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error("Active spreadsheet not bound.");
+
+    let userSheet = ss.getSheetByName('Users');
+    if (!userSheet) {
+      userSheet = ss.insertSheet('Users');
+      userSheet.appendRow(['Email / Username', 'Role', 'Status', 'Full Name', 'Department', 'Assigned PO', 'Position', 'Permissions']);
+      userSheet.getRange('A1:H1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      const curUser = Session.getActiveUser().getEmail() || 'admin@cardmba.com';
+      userSheet.appendRow([curUser, 'Admin', 'Active', 'CARD MBA Administrator', 'COMPLIANCE', 'ALL', 'IT RISK OFFICER', '{}']);
+    }
+
+    const inputUser = String(credentials.username || '').trim().toLowerCase();
+    if (!inputUser) return { success: false, message: 'Please enter your email or username.' };
+
+    const rows = userSheet.getDataRange().getValues();
+    if (rows.length < 2) return { success: false, message: 'Users directory is empty.' };
+
+    const headers = rows[0].map(h => String(h || '').trim().toLowerCase());
+    const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('user'));
+    const roleIdx = headers.findIndex(h => h.includes('role'));
+    const statusIdx = headers.findIndex(h => h.includes('status'));
+    const nameIdx = headers.findIndex(h => h.includes('name'));
+    const deptIdx = headers.findIndex(h => h.includes('dept'));
+    const poIdx = headers.findIndex(h => h.includes('po') || h.includes('office'));
+    const posIdx = headers.findIndex(h => h.includes('position'));
+
+    for (let i = 1; i < rows.length; i++) {
+      const emailVal = String(rows[i][emailIdx !== -1 ? emailIdx : 0] || '').trim().toLowerCase();
+      
+      if (emailVal === inputUser) {
+        const roleVal = String(rows[i][roleIdx !== -1 ? roleIdx : 1] || 'Auditor').trim();
+        const statusVal = String(rows[i][statusIdx !== -1 ? statusIdx : 2] || 'Active').trim();
+        const nameVal = String(rows[i][nameIdx !== -1 ? nameIdx : 3] || emailVal).trim();
+        const deptVal = String(rows[i][deptIdx !== -1 ? deptIdx : 4] || 'COMPLIANCE').trim();
+        const poVal = String(rows[i][poIdx !== -1 ? poIdx : 5] || 'ALL').trim();
+        const positionVal = String(rows[i][posIdx !== -1 ? posIdx : 6] || 'INTERNAL AUDITOR').trim();
+
+        if (statusVal.toLowerCase() !== 'active') {
+          return { success: false, message: 'Account status is inactive. Contact IT.' };
+        }
+
+        return {
+          success: true,
+          user: {
+            username: emailVal,
+            name: nameVal || emailVal.split('@')[0].toUpperCase(),
+            role: roleVal || 'Auditor',
+            department: deptVal,
+            assignedPo: poVal,
+            position: positionVal
+          }
+        };
+      }
+    }
+
+    // Default Institutional fallback for active workspace user
+    const activeGoogleEmail = Session.getActiveUser().getEmail();
+    if (activeGoogleEmail && activeGoogleEmail.toLowerCase() === inputUser) {
+      return {
+        success: true,
+        user: { 
+          username: activeGoogleEmail, 
+          name: activeGoogleEmail.split('@')[0].toUpperCase(), 
+          role: 'Admin',
+          department: 'COMPLIANCE',
+          assignedPo: 'ALL',
+          position: 'IT RISK OFFICER'
+        }
+      };
+    }
+
+    return { success: false, message: 'Email address not found in authorized Users list.' };
+  } catch (err) {
+    return { success: false, message: 'Auth Error: ' + err.toString() };
+  }
+}
+
+/**
+ * CARD MBA PMT 2026 - Resilient User Directory Fetcher
+ */
+function getUsersDirectory() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error("Active spreadsheet is not accessible.");
+
+    let sheet = ss.getSheetByName('Users');
+    
+    // Auto-create or repair headers if missing
+    if (!sheet) {
+      sheet = ss.insertSheet('Users');
+      sheet.appendRow(['Email', 'Name', 'Role', 'Position', 'Department', 'Assigned Scope', 'Status', 'Date Added', 'Permissions JSON']);
+      sheet.getRange('A1:I1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+      return { success: true, users: [] };
+    }
+
+    const lastRow = sheet.getLastRow();
+    const lastCol = Math.max(sheet.getLastColumn(), 9);
+
+    // If only header row or blank
+    if (lastRow < 2) {
+      return { success: true, users: [] };
+    }
+
+    // Read full dataset safely
+    const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    const users = [];
+
+    data.forEach(r => {
+      const email = String(r[0] || '').trim();
+      if (!email) return; // Skip empty rows
+
+      // Safe JSON parsing for permissions
+      let perms = {};
+      try {
+        if (r[8] && String(r[8]).trim().startsWith('{')) {
+          perms = JSON.parse(r[8]);
+        }
+      } catch (err) {
+        perms = {};
+      }
+
+      // Safe Date formatting
+      let dateAddedStr = '';
+      if (r[7] instanceof Date && !isNaN(r[7].getTime())) {
+        dateAddedStr = Utilities.formatDate(r[7], 'GMT+8', 'yyyy-MM-dd HH:mm');
+      } else if (r[7]) {
+        dateAddedStr = String(r[7]).trim();
+      } else {
+        dateAddedStr = Utilities.formatDate(new Date(), 'GMT+8', 'yyyy-MM-dd HH:mm');
+      }
+
+      users.push({
+        email: email,
+        name: String(r[1] || email.split('@')[0] || 'User').trim(),
+        role: String(r[2] || 'Viewer').trim(),
+        position: String(r[3] || 'INTERNAL AUDITOR').trim(),
+        department: String(r[4] || 'COMPLIANCE').trim(),
+        assignedPo: String(r[5] || 'All PO').trim(),
+        status: String(r[6] || 'Active').trim(),
+        dateAdded: dateAddedStr,
+        permissions: perms
+      });
+    });
+
+    return { success: true, users: users };
+  } catch (err) {
+    console.error("getUsersDirectory failure:", err);
+    return { 
+      success: false, 
+      message: err.toString(), 
+      users: [] 
+    };
+  }
+}
+
+function saveUserRecord(payload) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Users');
+
+    if (!sheet) {
+      sheet = ss.insertSheet('Users');
+      sheet.appendRow(['Email', 'Name', 'Role', 'Position', 'Department', 'Assigned Scope', 'Status', 'Date Added', 'Permissions JSON']);
+      sheet.getRange('A1:I1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+
+    const targetEmail = String(payload.email || '').trim().toLowerCase();
+    if (!targetEmail) throw new Error("Email address is required.");
+
+    const nowPst = Utilities.formatDate(new Date(), 'GMT+8', 'yyyy-MM-dd HH:mm');
+    const permsJson = JSON.stringify(payload.permissions || {});
+    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues() : [];
+    let existingRowIndex = -1;
+
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i][0] || '').trim().toLowerCase() === targetEmail) {
+        existingRowIndex = i + 2; // Sheet 1-indexed row number
+        break;
+      }
+    }
+
+    if (existingRowIndex > 0) {
+      // Update existing user (retains original Date Added if available, updates all permissions and profile metadata)
+      const originalDateAdded = rows[existingRowIndex - 2][7] ? safeFormatReportDate(rows[existingRowIndex - 2][7]) : nowPst;
+      sheet.getRange(existingRowIndex, 1, 1, 9).setValues([[
+        targetEmail,
+        payload.name || '',
+        payload.role || 'Viewer',
+        payload.position || 'INTERNAL AUDITOR',
+        payload.department || 'COMPLIANCE',
+        payload.assignedPo || 'All PO',
+        payload.status || 'Active',
+        originalDateAdded || nowPst,
+        permsJson
+      ]]);
+      return { success: true, message: `User profile for ${targetEmail} successfully updated!`, timestamp: nowPst };
+    } else {
+      // Append new institutional account with real-time timestamp
+      sheet.appendRow([
+        targetEmail,
+        payload.name || '',
+        payload.role || 'Viewer',
+        payload.position || 'INTERNAL AUDITOR',
+        payload.department || 'COMPLIANCE',
+        payload.assignedPo || 'All PO',
+        payload.status || 'Active',
+        nowPst,
+        permsJson
+      ]);
+      return { success: true, message: `New user account for ${targetEmail} created successfully!`, timestamp: nowPst };
+    }
+  } catch (err) {
+    return { success: false, message: 'saveUserRecord Error: ' + err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteUserRecord(userEmail) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Users');
+    if (!sheet || sheet.getLastRow() < 2) throw new Error("Users directory is empty.");
+
+    const target = String(userEmail || '').trim().toLowerCase();
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    let rowToDelete = -1;
+
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i][0] || '').trim().toLowerCase() === target) {
+        rowToDelete = i + 2;
+        break;
+      }
+    }
+
+    if (rowToDelete > 0) {
+      sheet.deleteRow(rowToDelete);
+      return { success: true, message: `User ${target} successfully removed from PMT portal.` };
+    }
+    return { success: false, message: `User ${target} not found in directory.` };
+  } catch (err) {
+    return { success: false, message: 'deleteUserRecord Error: ' + err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getCurrentActiveSession() {
+  try {
+    const email = Session.getActiveUser().getEmail();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let name = email ? email.split('@')[0].toUpperCase() : 'AUDITOR';
+    let position = 'INTERNAL AUDITOR';
+    let role = 'Admin';
+    let assignedPo = 'ALL';
+
+    const sheet = ss.getSheetByName('Users');
+    if (sheet && sheet.getLastRow() > 1) {
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]).trim().toLowerCase() === email.toLowerCase()) {
+          role = String(rows[i][1] || 'Auditor').trim();
+          name = String(rows[i][3] || name).trim();
+          assignedPo = String(rows[i][5] || 'ALL').trim();
+          position = String(rows[i][6] || position).trim();
+          break;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      email: email || '',
+      name: name,
+      role: role,
+      assignedPo: assignedPo,
+      position: position
+    };
+  } catch (e) {
+    return { success: false, email: '', name: 'AUDITOR', role: 'Auditor', assignedPo: 'ALL', position: 'INTERNAL AUDITOR' };
+  }
+}
+
+function getSpreadsheetPublicUrl() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    return { success: true, url: ss.getUrl() };
+  } catch(e) {
+    return { success: false, message: e.toString() };
+  }
+}

@@ -1,0 +1,439 @@
+/**
+ * CARD MBA PMT 2026 - Enhanced Notification & Email Dispatch Service
+ */
+
+function safeFormatReportDate(val) {
+  if (!val) return '';
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return Utilities.formatDate(val, 'GMT+8', 'yyyy-MM-dd');
+  }
+  const str = String(val).trim();
+  if (str.length >= 10 && str.charAt(4) === '-' && str.charAt(7) === '-') {
+    return str.substring(0, 10);
+  }
+  return str;
+}
+
+/**
+ * Retrieves the Notification Roster for all departments
+ */
+function getNotificationRoster() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Notification_Roster');
+
+    if (!sheet) {
+      sheet = ss.insertSheet('Notification_Roster');
+      sheet.appendRow(['Department Category', 'Notification Emails (Comma Separated)', 'Active Status', 'Last Updated']);
+      sheet.getRange('A1:D1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+
+      const defaultRows = [
+        ['COMPLIANCE AND RISK', Session.getActiveUser().getEmail() || 'compliance@cardmri.com', 'Active', new Date()],
+        ['ACCOUNTING', Session.getActiveUser().getEmail() || 'accounting@cardmri.com', 'Active', new Date()],
+        ['CLAIMS', 'claims@cardmri.com', 'Active', new Date()],
+        ['UNDERWRITING', 'underwriting@cardmri.com', 'Active', new Date()],
+        ['IT', 'it.risk@cardmri.com', 'Active', new Date()],
+        ['DCC', 'dcc@cardmri.com', 'Active', new Date()],
+        ['PERSONNEL FILE', 'hr@cardmri.com', 'Active', new Date()],
+        ['BOAT', 'boat@cardmri.com', 'Active', new Date()],
+        ['MBA COORDINATOR', 'coordinator@cardmri.com', 'Active', new Date()]
+      ];
+      sheet.getRange(2, 1, defaultRows.length, 4).setValues(defaultRows);
+    }
+
+    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues() : [];
+    const roster = {};
+
+    rows.forEach(r => {
+      const dept = String(r[0] || '').trim().toUpperCase();
+      const emails = String(r[1] || '').trim();
+      const status = String(r[2] || 'Active').trim();
+      if (dept) {
+        roster[dept] = {
+          emails: emails,
+          isActive: (status.toLowerCase() === 'active')
+        };
+      }
+    });
+
+    return { success: true, roster: roster };
+  } catch (err) {
+    return { success: false, message: err.toString(), roster: {} };
+  }
+}
+
+/**
+ * Saves or updates department roster emails from Settings
+ */
+function saveNotificationRoster(rosterMap) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Notification_Roster');
+
+    if (!sheet) {
+      getNotificationRoster();
+      sheet = ss.getSheetByName('Notification_Roster');
+    }
+
+    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues() : [];
+    const now = new Date();
+
+    Object.entries(rosterMap).forEach(([dept, conf]) => {
+      const cleanDept = dept.trim().toUpperCase();
+      const emailStr = Array.isArray(conf.emails) ? conf.emails.join(', ') : String(conf.emails || '').trim();
+      const status = conf.isActive ? 'Active' : 'Inactive';
+
+      let found = false;
+      for (let i = 0; i < rows.length; i++) {
+        if (String(rows[i][0]).trim().toUpperCase() === cleanDept) {
+          sheet.getRange(i + 2, 2, 1, 3).setValues([[emailStr, status, now]]);
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        sheet.appendRow([cleanDept, emailStr, status, now]);
+      }
+    });
+
+    return { success: true, message: 'Notification roster updated successfully.' };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Resolves active emails for PO staff assigned to the monitored branch
+ */
+function getPoStaffEmails(poName) {
+  const emails = new Set();
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const usersSheet = ss.getSheetByName('Users');
+    if (usersSheet && usersSheet.getLastRow() > 1) {
+      const data = usersSheet.getRange(2, 1, usersSheet.getLastRow() - 1, 7).getValues();
+      const targetPo = String(poName || '').trim().toLowerCase();
+
+      data.forEach(r => {
+        const userEmail = String(r[0] || '').trim().toLowerCase();
+        const scope = String(r[5] || '').toLowerCase();
+        const status = String(r[6] || '').toLowerCase();
+
+        if (status === 'active' && userEmail.includes('@')) {
+          if (scope.includes(targetPo) || scope.includes('all po') || scope === 'all' || scope.includes('national')) {
+            emails.add(userEmail);
+          }
+        }
+      });
+    }
+  } catch (e) {
+    console.warn("PO Staff lookup error: " + e.toString());
+  }
+  return Array.from(emails);
+}
+
+/**
+ * Validates and sanitizes comma/semicolon-separated email list
+ */
+function sanitizeEmailList(rawString) {
+  if (!rawString) return [];
+  return String(rawString)
+    .split(/[,;\s]+/)
+    .map(e => e.trim().toLowerCase())
+    .filter(e => e && e.includes('@') && e.indexOf('.') > e.indexOf('@'));
+}
+
+/**
+ * Dispatches findings notification to both Department Roster and Branch Staff
+ */
+function dispatchFindingNotification(batchPayload) {
+  try {
+    const poName = String(batchPayload.poMonitored || 'General Office').trim();
+    const auditorName = String(batchPayload.monitoredBy || 'Monitoring Officer').trim();
+    const auditDate = safeFormatReportDate(batchPayload.dateMonitoring) || safeFormatReportDate(new Date());
+    const items = batchPayload.findings || [];
+
+    if (!items.length) {
+      Logger.log("dispatchFindingNotification: No findings provided. Skipping email.");
+      return { success: true, dispatched: 0 };
+    }
+
+    // 1. Group findings by department
+    const deptGroups = {};
+    items.forEach(f => {
+      let dept = 'COMPLIANCE AND RISK';
+      const rawPart = String(f.particularFinding || '');
+      if (rawPart.includes(' - ')) {
+        dept = rawPart.split(' - ')[0].trim().toUpperCase();
+      } else if (f.department) {
+        dept = String(f.department).trim().toUpperCase();
+      }
+      if (!deptGroups[dept]) {
+        deptGroups[dept] = [];
+      }
+      deptGroups[dept].push(f);
+    });
+
+    // 2. Fetch rosters and branch staff emails
+    const rosterRes = getNotificationRoster();
+    const roster = rosterRes.success ? rosterRes.roster : {};
+    const poEmails = getPoStaffEmails(poName);
+
+    // Get Web App URL for Call to Action button
+    let webAppUrl = '';
+    try {
+      webAppUrl = ScriptApp.getService().getUrl();
+    } catch (e) {
+      webAppUrl = '';
+    }
+    if (!webAppUrl) {
+      try {
+        webAppUrl = SpreadsheetApp.getActiveSpreadsheet().getUrl();
+      } catch (e) {
+        webAppUrl = 'https://script.google.com';
+      }
+    }
+
+    let dispatchCount = 0;
+
+    // 3. Send email per department group
+    Object.entries(deptGroups).forEach(([dept, deptFindings]) => {
+      // Find matching roster entry (case-insensitive and partial match support)
+      let deptConf = roster[dept];
+      if (!deptConf) {
+        // Try finding partial match in roster
+        const matchKey = Object.keys(roster).find(k => k.includes(dept) || dept.includes(k));
+        if (matchKey) {
+          deptConf = roster[matchKey];
+        }
+      }
+
+      const recipientSet = new Set();
+
+      // Add Department Roster emails
+      if (deptConf && deptConf.isActive !== false) {
+        const cleanEmails = sanitizeEmailList(deptConf.emails);
+        cleanEmails.forEach(e => recipientSet.add(e));
+      }
+
+      // Add Branch Staff emails
+      poEmails.forEach(e => recipientSet.add(e));
+
+      // Fallback safety: If no recipient could be resolved, alert active user
+      if (recipientSet.size === 0) {
+        const fallback = Session.getActiveUser().getEmail();
+        if (fallback) recipientSet.add(fallback);
+      }
+
+      const validRecipients = Array.from(recipientSet).filter(e => e.includes('@'));
+      if (validRecipients.length === 0) {
+        Logger.log(`No valid email found for department ${dept}. Skipping.`);
+        return;
+      }
+
+      const toAddresses = validRecipients.join(',');
+      const subject = `[ACTION REQUIRED] Audit Findings Logged: ${dept} - PO ${poName} (${auditDate})`;
+
+      const emailHtml = buildFindingNotificationEmailTemplate({
+        poMonitored: poName,
+        department: dept,
+        dateMonitoring: auditDate,
+        monitoredBy: auditorName,
+        findings: deptFindings,
+        webAppUrl: webAppUrl
+      });
+
+      // Send email using GmailApp with fallback to MailApp
+      try {
+        GmailApp.sendEmail(toAddresses, subject, `New audit findings logged for PO ${poName}. Please open the PMT portal to comply with Action Taken.`, {
+          htmlBody: emailHtml,
+          name: 'CARD MBA Monitoring Portal'
+        });
+        Logger.log(`Dispatched finding notification email to: ${toAddresses}`);
+        dispatchCount++;
+      } catch (gmailErr) {
+        Logger.log("GmailApp send error, falling back to MailApp: " + gmailErr.toString());
+        MailApp.sendEmail({
+          to: toAddresses,
+          subject: subject,
+          htmlBody: emailHtml,
+          name: 'CARD MBA Monitoring Portal'
+        });
+        dispatchCount++;
+      }
+    });
+
+    return { success: true, dispatched: dispatchCount };
+  } catch (err) {
+    Logger.log("dispatchFindingNotification fatal error: " + err.toString());
+    return { success: false, message: err.toString() };
+  }
+}
+
+/**
+ * Diagnostic test you can run directly inside Apps Script editor
+ */
+function testDirectEmailNotification() {
+  const myEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+  Logger.log("Running direct email notification test to: " + myEmail);
+
+  const testPayload = {
+    poMonitored: 'Laguna 1',
+    monitoredBy: 'Test Quality Auditor',
+    dateMonitoring: Utilities.formatDate(new Date(), 'GMT+8', 'yyyy-MM-dd'),
+    findings: [
+      {
+        particularFinding: 'ACCOUNTING - Discrepancy in Cash Count vs CMS Logbook',
+        details: 'Audit verification noted unaccounted variance during morning count.',
+        amount: 2500,
+        deadlineDate: Utilities.formatDate(new Date(Date.now() + 86400000 * 5), 'GMT+8', 'yyyy-MM-dd'),
+        refNumber: 'WP-TEST-001'
+      }
+    ]
+  };
+
+  const res = dispatchFindingNotification(testPayload);
+  Logger.log("Dispatch Test Result: " + JSON.stringify(res));
+  return res;
+}
+
+/**
+ * Responsive Brand-Aligned HTML Email Notification Template
+ */
+function buildFindingNotificationEmailTemplate(data) {
+  let rowsHtml = '';
+  data.findings.forEach((f, idx) => {
+    const rawParticular = String(f.particularFinding || '');
+    const particulars = rawParticular.includes(' - ') ? rawParticular.split(' - ')[1] : rawParticular;
+    const impact = Number(f.amount) > 0 ? `₱${Number(f.amount).toLocaleString()}` : 'None / Process';
+    const deadline = f.deadlineDate ? safeFormatReportDate(f.deadlineDate) : 'Immediate';
+    const refNo = f.refNumber || 'N/A';
+
+    rowsHtml += `
+      <tr style="border-bottom: 1px solid #E2E8F0; font-size: 13px; color: #1E293B;">
+        <td style="padding: 10px 8px; font-weight: bold; color: #0F4C3A;">${idx + 1}</td>
+        <td style="padding: 10px 8px; font-weight: 600;">${particulars}</td>
+        <td style="padding: 10px 8px; color: #475569;">${f.details || 'Standard check non-compliance noted.'}</td>
+        <td style="padding: 10px 8px; font-family: monospace;">${impact}</td>
+        <td style="padding: 10px 8px; font-family: monospace; color: #64748B;">${refNo}</td>
+        <td style="padding: 10px 8px; font-weight: 600; color: #B45309;">${deadline}</td>
+      </tr>
+    `;
+  });
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Notice of Compliance Findings</title>
+    </head>
+    <body style="margin: 0; padding: 20px; font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #F8FAFC; color: #1E293B;">
+      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 650px; background-color: #FFFFFF; border-radius: 16px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        
+        <!-- Header Banner -->
+        <tr>
+          <td style="background-color: #0F4C3A; padding: 24px 30px; text-align: left;">
+            <table width="100%" border="0" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <span style="display: inline-block; background-color: #E5A823; color: #07241B; font-size: 10px; font-weight: 900; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">PMT 2026 ALERT</span>
+                  <h1 style="color: #FFFFFF; font-size: 18px; font-weight: 800; margin: 8px 0 2px 0; letter-spacing: -0.2px;">Notice of Audit Findings</h1>
+                  <p style="color: #A7F3D0; font-size: 12px; margin: 0;">CARD Mutual Benefit Association, Inc. • Internal Monitoring Division</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Summary Context Block -->
+        <tr>
+          <td style="padding: 24px 30px 12px 30px;">
+            <p style="font-size: 14px; line-height: 1.5; color: #334155; margin-top: 0;">
+              This is an automated operational alert. Audit and monitoring findings have been recorded during field inspection for your designated department and provincial branch.
+            </p>
+            
+            <table width="100%" cellpadding="8" cellspacing="0" style="background-color: #F1F5F9; border-radius: 10px; font-size: 12px; margin: 16px 0;">
+              <tr>
+                <td width="30%" style="color: #64748B; font-weight: bold;">PROVINCIAL OFFICE:</td>
+                <td width="70%" style="color: #0F4C3A; font-weight: 800;">${data.poMonitored}</td>
+              </tr>
+              <tr>
+                <td style="color: #64748B; font-weight: bold;">DEPARTMENT:</td>
+                <td style="color: #1E293B; font-weight: 700;">${data.department}</td>
+              </tr>
+              <tr>
+                <td style="color: #64748B; font-weight: bold;">MONITORING DATE:</td>
+                <td style="color: #1E293B;">${data.dateMonitoring}</td>
+              </tr>
+              <tr>
+                <td style="color: #64748B; font-weight: bold;">MONITORED BY:</td>
+                <td style="color: #1E293B;">${data.monitoredBy}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Findings Table -->
+        <tr>
+          <td style="padding: 0 30px 20px 30px;">
+            <h3 style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0F4C3A; margin: 10px 0 10px 0; border-bottom: 2px solid #0F4C3A; padding-bottom: 6px;">
+              Itemized Observations & Remediation Deadlines
+            </h3>
+            
+            <div style="overflow-x: auto;">
+              <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; text-align: left;">
+                <thead>
+                  <tr style="background-color: #F8FAFC; border-bottom: 2px solid #CBD5E1; font-size: 11px; text-transform: uppercase; color: #64748B;">
+                    <th style="padding: 8px;">#</th>
+                    <th style="padding: 8px;">Particular Finding</th>
+                    <th style="padding: 8px;">Details / Observations</th>
+                    <th style="padding: 8px;">Impact</th>
+                    <th style="padding: 8px;">Ref No.</th>
+                    <th style="padding: 8px;">Deadline</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Instructions & Action Taken Requirement -->
+        <tr>
+          <td style="padding: 0 30px 24px 30px;">
+            <div style="background-color: #FEF3C7; border-left: 4px solid #D97706; padding: 12px 16px; border-radius: 4px; font-size: 12px; color: #92400E; line-height: 1.4;">
+              <strong>Action Required by PO Staff & Department Heads:</strong><br>
+              Please log in to the PMT Portal and encode your branch mitigation under <strong>Action Taken</strong> before the indicated timeframe. Findings will remain in <em>Open</em> status until reviewed and validated by the Monitoring Team.
+            </div>
+
+            <!-- Call to Action Button -->
+            <div style="text-align: center; margin-top: 24px;">
+              <a href="${data.webAppUrl}" target="_blank" style="display: inline-block; background-color: #0F4C3A; color: #FFFFFF; font-weight: bold; font-size: 13px; padding: 12px 28px; border-radius: 8px; text-decoration: none; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">
+                Open PMT Portal & Submit Action Taken &rarr;
+              </a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color: #F8FAFC; padding: 16px 30px; text-align: center; border-top: 1px solid #E2E8F0; font-size: 11px; color: #94A3B8;">
+            This email was automatically generated by the CARD MBA Program Monitoring Tool (PMT 2026).<br>
+            Please do not reply directly to this automated email. For compliance queries, contact your assigned Monitoring Officer.
+          </td>
+        </tr>
+
+      </table>
+    </body>
+    </html>
+  `;
+}

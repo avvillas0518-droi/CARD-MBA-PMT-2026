@@ -1,0 +1,230 @@
+/**
+ * CARD MBA Program Monitoring Tool (PMT) 2026
+ * Calculations Engine: Aging updates, Staff Demerit Attribution, and Metric Rollups.
+ * Eliminates fragile spreadsheet formulas to avoid #REF! errors.
+ */
+
+const CalculationsEngine = {
+
+  /**
+   * Catalog of 7 standardized AMLA violations mapped to severity and demerits.
+   */
+  getAmlaViolationCatalog() {
+    return [
+      { type: 'Old Form APK', severity: 'Moderate', demerits: 100 },
+      { type: 'Incorrect Information (Members/Legal Dependents/Beneficiaries)', severity: 'Major', demerits: 200 },
+      { type: 'Incomplete Information (APK vs. CMS)', severity: 'Major', demerits: 200 },
+      { type: 'No APK', severity: 'Major', demerits: 200 },
+      { type: 'Unencoded/Un-uploaded/Unverified APK', severity: 'Major', demerits: 200 },
+      { type: 'No proof of birth', severity: 'Moderate', demerits: 100 },
+      { type: 'Incomplete signatures in the APK', severity: 'Moderate', demerits: 100 }
+    ];
+  },
+
+  getAmlaRule(violationType) {
+    const catalog = this.getAmlaViolationCatalog();
+    const match = catalog.find(c => c.type.toLowerCase() === String(violationType).trim().toLowerCase());
+    return match || { type: violationType, severity: 'Moderate', demerits: 100 };
+  },
+
+  /**
+   * Batch recalculation of Aging and Overdue flag in Working_Paper.
+   */
+  updateWorkingPaperAging() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(PMT_CONFIG.SHEETS.WORKING_PAPER);
+    if (!sheet || sheet.getLastRow() < 2) return;
+
+    const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14);
+    const data = dataRange.getValues();
+    const today = new Date();
+
+    const updatedAgingAndOverdue = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const monDateRaw = data[i][1]; // Col 2: Date of Monitoring
+      const targetDateRaw = data[i][7]; // Col 8: Compliance Target Date
+      const dateCompliedRaw = data[i][8]; // Col 9: Date Complied
+      const status = String(data[i][11]).trim(); // Col 12: Status
+
+      let aging = 0;
+      if (monDateRaw instanceof Date && !isNaN(monDateRaw.getTime())) {
+        if (status.toLowerCase() === 'close') {
+          const endDate = (dateCompliedRaw instanceof Date && !isNaN(dateCompliedRaw.getTime()))
+            ? dateCompliedRaw
+            : today;
+          aging = Math.max(0, Math.floor((endDate.getTime() - monDateRaw.getTime()) / (1000 * 60 * 60 * 24)));
+        } else {
+          aging = Math.max(0, Math.floor((today.getTime() - monDateRaw.getTime()) / (1000 * 60 * 60 * 24)));
+        }
+      }
+
+      const isOverdue = (status.toLowerCase() === 'open' && aging > 90) ? 'YES' : 'NO';
+      updatedAgingAndOverdue.push([aging, isOverdue]);
+    }
+
+    // Write back Aging (Col 10) & Overdue (Col 11) in batch
+    sheet.getRange(2, 10, updatedAgingAndOverdue.length, 2).setValues(updatedAgingAndOverdue);
+  },
+
+  /**
+   * Compiles executive risk summaries into 'Summary of Findings Final' and 'Summary of AMLA Findings'.
+   */
+  rebuildSummaryMetrics() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const wpSheet = ss.getSheetByName(PMT_CONFIG.SHEETS.WORKING_PAPER);
+    const summarySheet = ss.getSheetByName(PMT_CONFIG.SHEETS.SUMMARY_FINDINGS);
+    if (!summarySheet) return;
+
+    let totalFindings = 0;
+    let openFindings = 0;
+    let closedFindings = 0;
+    let overdueFindings = 0;
+    const deptDistribution = {};
+
+    if (wpSheet && wpSheet.getLastRow() > 1) {
+      const wpData = wpSheet.getRange(2, 1, wpSheet.getLastRow() - 1, 13).getValues();
+      totalFindings = wpData.length;
+
+      wpData.forEach(row => {
+        const dept = String(row[2] || 'Unassigned').trim();
+        const aging = Number(row[9]) || 0;
+        const status = String(row[11] || 'Open').trim().toLowerCase();
+
+        if (status === 'close') {
+          closedFindings++;
+        } else {
+          openFindings++;
+          if (aging > 90) overdueFindings++;
+        }
+
+        deptDistribution[dept] = (deptDistribution[dept] || 0) + 1;
+      });
+    }
+
+    // Process AMLA violations
+    const amlaSheet = ss.getSheetByName(PMT_CONFIG.SHEETS.AMLA_FINDINGS);
+    let totalAmlaCases = 0;
+    let totalAmlaDemerits = 0;
+    const amlaCategoryCounts = {};
+
+    if (amlaSheet && amlaSheet.getLastRow() > 1) {
+      const amlaData = amlaSheet.getRange(2, 1, amlaSheet.getLastRow() - 1, 8).getValues();
+      totalAmlaCases = amlaData.length;
+      amlaData.forEach(row => {
+        const cat = String(row[4] || 'Other').trim();
+        const demerits = Number(row[6]) || 0;
+        totalAmlaDemerits += demerits;
+        amlaCategoryCounts[cat] = (amlaCategoryCounts[cat] || 0) + 1;
+      });
+    }
+
+    // Write structured executive rollup into Summary of Findings Final
+    summarySheet.clear();
+    const resolutionRate = totalFindings > 0 ? ((closedFindings / totalFindings) * 100).toFixed(1) + '%' : '100%';
+
+    const summaryMatrix = [
+      ['CARD MUTUAL BENEFIT ASSOCIATION, INC. - PROGRAM MONITORING TOOL 2026'],
+      ['EXECUTIVE RISK & FINDINGS SUMMARY ROLLUP'],
+      [`Last Generated: ${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')}`],
+      [''],
+      ['KEY PERFORMANCE INDICATOR (KPI)', 'METRIC VALUE', 'BENCHMARK / REMARKS'],
+      ['Total Working Paper Findings', totalFindings, 'Total audit points logged'],
+      ['Open Findings (Pending Action)', openFindings, openFindings > 5 ? 'Elevated Operational Risk' : 'Normal'],
+      ['Closed Findings (Resolved)', closedFindings, 'Verified compliance actions taken'],
+      ['Compliance Resolution Rate (%)', resolutionRate, 'Target: >= 90.0%'],
+      ['Overdue Items (> 90 Days)', overdueFindings, overdueFindings > 0 ? 'CRITICAL ESCALATION REQUIRED' : 'Satisfactory'],
+      ['Total AMLA Violation Cases', totalAmlaCases, 'Adherence to Anti-Money Laundering Act'],
+      ['Total AMLA Demerit Points', totalAmlaDemerits, 'Aggregate penalty points'],
+      [''],
+      ['DEPARTMENTAL BREAKDOWN', 'FINDINGS COUNT', 'SHARE %'],
+    ];
+
+    Object.keys(deptDistribution).sort().forEach(dept => {
+      const count = deptDistribution[dept];
+      const share = totalFindings > 0 ? ((count / totalFindings) * 100).toFixed(1) + '%' : '0%';
+      summaryMatrix.push([dept, count, share]);
+    });
+
+    summarySheet.getRange(1, 1, summaryMatrix.length, 3).setValues(summaryMatrix);
+
+    // Style the Summary Sheet
+    summarySheet.getRange('A1:C1').setFontSize(13).setFontWeight('bold').setFontColor('#003366');
+    summarySheet.getRange('A2:C2').setFontSize(11).setFontWeight('bold');
+    summarySheet.getRange('A5:C5').setFontWeight('bold').setBackground('#003366').setFontColor('#FFFFFF');
+    summarySheet.getRange(14, 1, 1, 3).setFontWeight('bold').setBackground('#EAECEE');
+    summarySheet.autoResizeColumns(1, 3);
+  },
+
+  /**
+   * Rebuilds staff accountable demerit ledger for PM, CO, BK, CP, and IP.
+   */
+  rebuildStaffDemerits() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const demeritSheet = ss.getSheetByName(PMT_CONFIG.SHEETS.SUMMARY_DEMERITS);
+    if (!demeritSheet) return;
+
+    const roleBuckets = {
+      'PM': { roleName: 'Provincial Manager', count: 0, demerits: 0, open: 0, overdue: 0 },
+      'CO': { roleName: 'Compliance Officer / Coordinator', count: 0, demerits: 0, open: 0, overdue: 0 },
+      'BK': { roleName: 'Bookkeeper', count: 0, demerits: 0, open: 0, overdue: 0 },
+      'CP': { roleName: 'Claims Personnel', count: 0, demerits: 0, open: 0, overdue: 0 },
+      'IP': { roleName: 'Itinerant Personnel', count: 0, demerits: 0, open: 0, overdue: 0 }
+    };
+
+    // Scan AMLA Findings
+    const amlaSheet = ss.getSheetByName(PMT_CONFIG.SHEETS.AMLA_FINDINGS);
+    if (amlaSheet && amlaSheet.getLastRow() > 1) {
+      const amlaData = amlaSheet.getRange(2, 1, amlaSheet.getLastRow() - 1, 9).getValues();
+      amlaData.forEach(row => {
+        let role = String(row[7] || 'CO').trim().toUpperCase();
+        if (!roleBuckets[role]) role = 'CO'; // fallback to Compliance/Coordinator
+
+        const demerits = Number(row[6]) || 0;
+        const status = String(row[8] || 'Open').trim().toLowerCase();
+
+        roleBuckets[role].count++;
+        roleBuckets[role].demerits += demerits;
+        if (status === 'open') roleBuckets[role].open++;
+      });
+    }
+
+    // Scan Working Paper for accountable roles
+    const wpSheet = ss.getSheetByName(PMT_CONFIG.SHEETS.WORKING_PAPER);
+    if (wpSheet && wpSheet.getLastRow() > 1) {
+      const wpData = wpSheet.getRange(2, 1, wpSheet.getLastRow() - 1, 13).getValues();
+      wpData.forEach(row => {
+        let role = String(row[12] || '').trim().toUpperCase();
+        if (role && roleBuckets[role]) {
+          const aging = Number(row[9]) || 0;
+          const status = String(row[11] || 'Open').trim().toLowerCase();
+          
+          if (status === 'open') {
+            roleBuckets[role].open++;
+            if (aging > 90) roleBuckets[role].overdue++;
+          }
+        }
+      });
+    }
+
+    // Write to Summary of Demerits
+    demeritSheet.clear();
+    const output = [
+      ['STAFF DEMERIT ATTRIBUTION & ACCOUNTABILITY MATRIX - PMT 2026'],
+      [`Generated: ${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')}`],
+      [''],
+      ['ROLE CODE', 'ROLE DESIGNATION', 'TOTAL VIOLATIONS', 'TOTAL DEMERITS', 'OPEN CASES', 'LONG DUE (>90 DAYS)', 'STATUS RATING']
+    ];
+
+    Object.keys(roleBuckets).forEach(code => {
+      const b = roleBuckets[code];
+      const rating = b.demerits > 400 ? 'High Risk' : (b.demerits > 100 ? 'Moderate' : 'Low Risk');
+      output.push([code, b.roleName, b.count, b.demerits, b.open, b.overdue, rating]);
+    });
+
+    demeritSheet.getRange(1, 1, output.length, 7).setValues(output);
+    demeritSheet.getRange('A1:G1').setFontSize(12).setFontWeight('bold').setFontColor('#003366');
+    demeritSheet.getRange('A4:G4').setFontWeight('bold').setBackground('#003366').setFontColor('#FFFFFF');
+    demeritSheet.autoResizeColumns(1, 7);
+  }
+};

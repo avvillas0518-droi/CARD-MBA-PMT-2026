@@ -1,0 +1,66 @@
+/**
+ * CARD MBA - Security & Governance Manager
+ */
+
+const PROTECTED_SHEETS = [
+  'FINDINGS',
+  'Copy of FINDINGS',
+  'Dropdowns',
+  'Monitoring Procedures',
+  'Table of Likelihood and Impact',
+  'EMAIL'
+];
+
+/**
+ * Protects master configuration tabs from accidental modification
+ */
+function protectMasterSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userEmail = Session.getEffectiveUser().getEmail();
+  let count = 0;
+
+  PROTECTED_SHEETS.forEach(sheetName => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return;
+
+    // Check existing protections
+    const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+    let protection = protections.length > 0 ? protections[0] : sheet.protect();
+    
+    protection.setDescription(`Master Data Protection: ${sheetName}`);
+    protection.setWarningOnly(false);
+
+    // Set owner/admin as only editor
+    const editors = protection.getEditors();
+    protection.removeEditors(editors);
+    protection.addEditor(userEmail);
+
+    if (protection.canDomainEdit()) {
+      protection.setDomainEdit(false);
+    }
+    count++;
+  });
+
+  SpreadsheetApp.getUi().alert(`Data Governance: Successfully locked ${count} master reference sheets.`);
+}
+
+/**
+ * Temporarily removes protection to allow Compliance/Admins to add dropdown options
+ */
+function unlockMasterSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let count = 0;
+
+  PROTECTED_SHEETS.forEach(sheetName => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return;
+
+    const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+    protections.forEach(p => {
+      p.remove();
+      count++;
+    });
+  });
+
+  SpreadsheetApp.getUi().alert(`Settings Unlocked: Removed protection on ${count} master sheets. You can now edit Dropdowns and Findings.`);
+}

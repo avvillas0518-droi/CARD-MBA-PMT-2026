@@ -1,0 +1,196 @@
+/**
+ * CARD MBA PMT 2026 - Master Mock Dataset Generator
+ * Seeds >= 1,000 records across Working Paper, AMLA Findings, and Monitoring Activities
+ * to satisfy the DSA Project Proposal Dataset Criterion.
+ */
+
+function seedCompleteMockDataset() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  
+  // 1. Verify Office Master data exists
+  const officeSheet = ss.getSheetByName('Office_Master');
+  if (!officeSheet || officeSheet.getLastRow() < 2) {
+    seedDropdownsAndFindings(); // Initialize base catalogs if not already present
+  }
+  
+  const oData = ss.getSheetByName('Office_Master').getRange(2, 1, 95, 3).getValues();
+  const departments = [
+    'COMPLIANCE AND RISK', 'ACCOUNTING', 'CLAIMS', 
+    'UNDERWRITING', 'IT', 'DCC', 'BOAT', 'MBA COORDINATOR'
+  ];
+  const auditors = [
+    { name: 'Maria A. Santos', email: 'auditor1@cardmba.com', pos: 'INTERNAL AUDITOR' },
+    { name: 'Alexis Marie Dacallo', email: 'alex.dacallo@cardmri.com', pos: 'IT RISK OFFICER' },
+    { name: 'Juan C. Reyes', email: 'auditor2@cardmba.com', pos: 'COMPLIANCE OFFICER' },
+    { name: 'Elena V. Ramos', email: 'auditor3@cardmba.com', pos: 'MONITORING OFFICER' }
+  ];
+  
+  // ----------------------------------------------------
+  // A. Seed Working Paper (600 Records)
+  // ----------------------------------------------------
+  let wpSheet = ss.getSheetByName('Working_Paper');
+  if (!wpSheet) {
+    wpSheet = ss.insertSheet('Working_Paper');
+    const headers = [
+      'Ref ID', 'Date of Monitoring', 'PO Monitored', 'Cluster', 'Region',
+      'Transaction Date From', 'Transaction Date To', 'Particular Findings', 
+      'Details of Findings', 'Monitored By', 'Position', 'Amount', 
+      'Timeframe / Deadline', 'Status', 'Action Taken', 
+      'Date Complied', 'Date / Reference Number', 'Aging (in days)', 'Remarks', 'Monitored Email'
+    ];
+    wpSheet.appendRow(headers);
+    wpSheet.getRange('A1:T1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+    wpSheet.setFrozenRows(1);
+  }
+
+  const wpRows = [];
+  const poCounters = {};
+  const baseYear = 2026;
+
+  for (let i = 1; i <= 600; i++) {
+    const office = oData[Math.floor(Math.random() * oData.length)];
+    const region = office[0];
+    const cluster = office[1];
+    const po = office[2];
+    const cleanPo = String(po).replace(/[^a-zA-Z0-9]/g, '');
+
+    poCounters[cleanPo] = (poCounters[cleanPo] || 0) + 1;
+    const seqStr = String(poCounters[cleanPo]).padStart(3, '0');
+    const refId = `WP-${cleanPo}-${baseYear}-${seqStr}`;
+
+    const auditor = auditors[Math.floor(Math.random() * auditors.length)];
+    const dept = departments[Math.floor(Math.random() * departments.length)];
+    const amount = (Math.random() > 0.6) ? Math.floor(Math.random() * 45000) + 500 : 0;
+    
+    // Date randomizer: Last 120 days
+    const pastDays = Math.floor(Math.random() * 120);
+    const monDate = new Date();
+    monDate.setDate(monDate.getDate() - pastDays);
+
+    const deadlineDate = new Date(monDate);
+    deadlineDate.setDate(deadlineDate.getDate() + 15); // 15 days remediation target
+
+    const isClosed = Math.random() > 0.45;
+    let status = 'Open';
+    let actionTaken = '';
+    let dateComplied = '';
+
+    if (isClosed) {
+      status = 'Closed';
+      actionTaken = 'Verified document attachment, rectified CAS posting entry, and filed acknowledged logbook.';
+      const compDate = new Date(deadlineDate);
+      compDate.setDate(compDate.getDate() + Math.floor(Math.random() * 10) - 5);
+      dateComplied = compDate;
+    }
+
+    const rowNum = wpSheet.getLastRow() + i;
+    const agingFormula = `=IF(ISBLANK(M${rowNum}), 0, IF(ISBLANK(P${rowNum}), MAX(0, TODAY() - M${rowNum}), MAX(0, P${rowNum} - M${rowNum})))`;
+
+    wpRows.push([
+      refId, monDate, po, cluster, region,
+      monDate, monDate, `${dept} - Operational Non-Compliance Statement`,
+      `Audit verification observed missing signatures and non-submission of required reports during field monitoring in ${po}.`,
+      auditor.name, auditor.pos, amount, deadlineDate, status, actionTaken, dateComplied,
+      `REF-2026-${1000 + i}`, agingFormula, 'Verified via automated audit seeder.', auditor.email
+    ]);
+  }
+  wpSheet.getRange(wpSheet.getLastRow() + 1, 1, wpRows.length, 20).setValues(wpRows);
+
+  // ----------------------------------------------------
+  // B. Seed AMLA Violations (450 Records)
+  // ----------------------------------------------------
+  let amlaSheet = ss.getSheetByName('AMLA Findings For Compliance T');
+  if (!amlaSheet) {
+    amlaSheet = ss.insertSheet('AMLA Findings For Compliance T');
+    const aHeaders = [
+      'AMLA Ref ID', 'Date of Monitoring', 'PO Monitored', 'Cluster', 'Region',
+      'CIF', 'Account / Member Name', 'Unit', 'Center', 'Branch', 'Date Recog',
+      'Old APK', 'Legal Dependents Inaccuracy', 'No APK', 'No Proof of Birth',
+      'Incorrect Member Info', 'Incomplete APK vs CMS', 'Un-uploaded APK',
+      'Incomplete Signatures', 'Calculated Demerits', 'Monitored By', 'Position',
+      'Timeframe / Deadline', 'Status', 'Action Taken', 'Date Complied',
+      'Date / Reference Number', 'Aging (in days)', 'Monitored Email'
+    ];
+    amlaSheet.appendRow(aHeaders);
+    amlaSheet.getRange('A1:AC1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+    amlaSheet.setFrozenRows(1);
+  }
+
+  const amlaRows = [];
+  const amlaPoCounters = {};
+  const memberSurnames = ['Reyes', 'Santos', 'Dela Cruz', 'Garcia', 'Mendoza', 'Flores', 'Bautista', 'Villanueva'];
+  const memberFirstnames = ['Maria', 'Corazon', 'Juana', 'Luzviminda', 'Teresa', 'Esperanza', 'Elena', 'Carmencita'];
+
+  for (let j = 1; j <= 450; j++) {
+    const office = oData[Math.floor(Math.random() * oData.length)];
+    const region = office[0];
+    const cluster = office[1];
+    const po = office[2];
+    const cleanPo = String(po).replace(/[^a-zA-Z0-9]/g, '');
+
+    amlaPoCounters[cleanPo] = (amlaPoCounters[cleanPo] || 0) + 1;
+    const seqStr = String(amlaPoCounters[cleanPo]).padStart(3, '0');
+    const refId = `AMLA-${cleanPo}-${baseYear}-${seqStr}`;
+
+    const auditor = auditors[Math.floor(Math.random() * auditors.length)];
+    const memberName = `${memberSurnames[Math.floor(Math.random() * memberSurnames.length)]}, ${memberFirstnames[Math.floor(Math.random() * memberFirstnames.length)]}`;
+    const cif = `CIF-${Math.floor(10000000 + Math.random() * 90000000)}`;
+
+    const chkOldApk = Math.random() > 0.75 ? 'Yes' : 'No';
+    const chkLegalDep = Math.random() > 0.8 ? 'Yes' : 'No';
+    const chkNoApk = Math.random() > 0.85 ? 'Yes' : 'No';
+    const chkNoBirth = Math.random() > 0.7 ? 'Yes' : 'No';
+    const chkIncMember = Math.random() > 0.8 ? 'Yes' : 'No';
+    const chkIncApk = Math.random() > 0.75 ? 'Yes' : 'No';
+    const chkUnencoded = Math.random() > 0.85 ? 'Yes' : 'No';
+    const chkIncSig = Math.random() > 0.7 ? 'Yes' : 'No';
+
+    let demerits = 0;
+    if (chkOldApk === 'Yes') demerits += 100;
+    if (chkLegalDep === 'Yes') demerits += 200;
+    if (chkNoApk === 'Yes') demerits += 200;
+    if (chkNoBirth === 'Yes') demerits += 100;
+    if (chkIncMember === 'Yes') demerits += 200;
+    if (chkIncApk === 'Yes') demerits += 200;
+    if (chkUnencoded === 'Yes') demerits += 200;
+    if (chkIncSig === 'Yes') demerits += 100;
+    if (demerits === 0) demerits = 100; // Guarantee finding point presence
+
+    const pastDays = Math.floor(Math.random() * 110);
+    const monDate = new Date();
+    monDate.setDate(monDate.getDate() - pastDays);
+
+    const deadlineDate = new Date(monDate);
+    deadlineDate.setDate(deadlineDate.getDate() + 15);
+
+    const isClosed = Math.random() > 0.5;
+    let status = 'Open';
+    let actionTaken = '';
+    let dateComplied = '';
+
+    if (isClosed) {
+      status = 'Closed';
+      actionTaken = 'Updated APK filed and encoded in CMS with member identification attachments.';
+      const compDate = new Date(deadlineDate);
+      compDate.setDate(compDate.getDate() + Math.floor(Math.random() * 8) - 4);
+      dateComplied = compDate;
+    }
+
+    const rowNum = amlaSheet.getLastRow() + j;
+    const agingFormula = `=IF(ISBLANK(W${rowNum}), 0, IF(ISBLANK(Z${rowNum}), MAX(0, TODAY() - W${rowNum}), MAX(0, Z${rowNum} - W${rowNum})))`;
+
+    amlaRows.push([
+      refId, monDate, po, cluster, region,
+      cif, memberName, `Unit ${Math.floor(Math.random() * 8) + 1}`, `Center ${Math.floor(Math.random() * 30) + 1}`,
+      `${po} Branch`, monDate,
+      chkOldApk, chkLegalDep, chkNoApk, chkNoBirth, chkIncMember, chkIncApk, chkUnencoded, chkIncSig,
+      demerits, auditor.name, auditor.pos, deadlineDate, status, actionTaken, dateComplied,
+      `AMLA-REF-${2000 + j}`, agingFormula, auditor.email
+    ]);
+  }
+  amlaSheet.getRange(amlaSheet.getLastRow() + 1, 1, amlaRows.length, 29).setValues(amlaRows);
+
+  SpreadsheetApp.flush();
+  ui.alert(`Seeding Complete! Appended ${wpRows.length} Working Paper records and ${amlaRows.length} AMLA records (Total: ${wpRows.length + amlaRows.length} records).`);
+}

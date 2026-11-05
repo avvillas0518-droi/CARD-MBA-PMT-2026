@@ -1,0 +1,473 @@
+/**
+ * CARD MBA PMT 2026 - Master Form & Metadata Backend Service
+ */
+
+function getInitialFormData() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const officeMap = {};
+    const poList = [];
+    const regionSet = new Set();
+    const clusterSet = new Set();
+
+    const officeSheet = ss.getSheetByName('Office_Master');
+    if (officeSheet && officeSheet.getLastRow() > 1) {
+      const oData = officeSheet.getRange(2, 1, officeSheet.getLastRow() - 1, 3).getValues();
+      oData.forEach(r => {
+        const region = String(r[0] || '').trim();
+        const cluster = String(r[1] || '').trim();
+        const po = String(r[2] || '').trim();
+        if (po) {
+          officeMap[po] = { cluster: cluster, region: region };
+          poList.push(po);
+          if (region) regionSet.add(region);
+          if (cluster) clusterSet.add(cluster);
+        }
+      });
+    }
+
+    if (poList.length === 0) {
+      const defaultPos = [
+        { po: 'Laguna 1', c: 'Luzon 9', r: 'Region 4' },
+        { po: 'Laguna 2', c: 'Luzon 9', r: 'Region 4' },
+        { po: 'Batangas 1', c: 'Luzon 7', r: 'Region 4' },
+        { po: 'Batangas 2', c: 'Luzon 7', r: 'Region 4' },
+        { po: 'Cavite 1', c: 'Luzon 8', r: 'Region 4' },
+        { po: 'Bulacan 1', c: 'Luzon 5A', r: 'Region 3' },
+        { po: 'Pampanga', c: 'Luzon 4', r: 'Region 3' },
+        { po: 'Iloilo 1', c: 'Visayas 1', r: 'Region 6' },
+        { po: 'Davao 1', c: 'Mindanao 1', r: 'Region 11' }
+      ];
+      defaultPos.forEach(d => {
+        officeMap[d.po] = { cluster: d.c, region: d.r };
+        poList.push(d.po);
+        regionSet.add(d.r);
+        clusterSet.add(d.c);
+      });
+    }
+
+    let departments = [];
+    const fSheet = ss.getSheetByName('FINDINGS');
+    if (fSheet && fSheet.getLastRow() > 1) {
+      const dData = fSheet.getRange(2, 1, fSheet.getLastRow() - 1, 1).getValues();
+      departments = Array.from(new Set(dData.map(r => String(r[0]).trim()).filter(Boolean)));
+    }
+       if (departments.length === 0) {
+      departments = [
+        'COMPLIANCE AND RISK', 'ACCOUNTING', 'CLAIMS', 
+        'UNDERWRITING', 'IT', 'DCC', 'BOAT', 
+        'MBA COORDINATOR', 'ACCOUNTS AND RECORDS', 'PERSONNEL FILE'
+      ];
+    }
+
+    // DYNAMIC DROPDOWN CAPTURE: Pull positions directly from Dropdowns sheet with fallback
+    let positions = [];
+    const dropdownSheet = ss.getSheetByName('Dropdowns');
+    if (dropdownSheet && dropdownSheet.getLastRow() > 1) {
+      const dropData = dropdownSheet.getRange(2, 1, dropdownSheet.getLastRow() - 1, 3).getValues();
+      dropData.forEach(r => {
+        const cat = String(r[0] || '').trim().toUpperCase();
+        const posVal = String(r[1] || r[2] || '').trim();
+        if ((cat.includes('POSITION') || cat.includes('DESIGNATION') || cat.includes('ROLE')) && posVal) {
+          positions.push(posVal);
+        }
+      });
+    }
+
+    if (positions.length === 0) {
+      positions = [
+        'INTERNAL AUDITOR', 'INTERNAL AUDIT OFFICER', 'INTERNAL AUDIT MANAGER',
+        'COMPLIANCE OFFICER', 'COMPLIANCE SPECIALIST', 'IT RISK OFFICER',
+        'RISK OFFICER', 'DEPUTY DIRECTOR FOR AUDIT', 'DEPUTY DIRECTOR FOR RISK MANAGEMENT',
+        'MONITORING OFFICER', 'VALIDATOR', 'PROVINCIAL MANAGER', 'BOOKKEEPER',
+        'CLAIMS OFFICER', 'UNDERWRITING OFFICER', 'CLUSTER MANAGER'
+      ];
+    }
+    positions = Array.from(new Set(positions)).sort();
+
+    const docsChecked = getDocumentsCheckedCatalog();
+
+    return {
+      success: true,
+      poList: Array.from(new Set(poList)).sort(),
+      regions: Array.from(regionSet).sort(),
+      clusters: Array.from(clusterSet).sort(),
+      officeMap: officeMap,
+      departments: departments.sort(),
+      positions: positions,
+      documentsChecked: docsChecked
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err.toString(),
+      poList: ['Laguna 1', 'Batangas 1', 'Cavite 1', 'Bulacan 1'],
+      regions: ['Region 3', 'Region 4', 'Region 6'],
+      clusters: ['Luzon 5A', 'Luzon 7', 'Luzon 8', 'Luzon 9'],
+      officeMap: {},
+      departments: ['COMPLIANCE AND RISK', 'ACCOUNTING', 'CLAIMS', 'IT', 'PERSONNEL FILE'],
+      positions: ['INTERNAL AUDITOR', 'COMPLIANCE OFFICER', 'IT RISK OFFICER'],
+      documentsChecked: ['Logbooks', 'Official Receipts', 'Cash Count Sheets', 'Application Forms (APK)', 'CMS Back-up Files']
+    };
+  }
+}
+
+function getDocumentsCheckedCatalog() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Dropdowns');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return ['Logbooks', 'Claim Folders', 'Official Receipts', 'Cash Count Sheets', 'Application Forms (APK)', 'CMS Back-up Files'];
+    }
+
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+    const docs = [];
+    data.forEach(r => {
+      const cat = String(r[0] || '').trim().toUpperCase();
+      const val = String(r[1] || r[2] || '').trim();
+      if (cat.includes('DOCUMENT') && val) {
+        docs.push(val);
+      }
+    });
+
+    return docs.length > 0 ? Array.from(new Set(docs)).sort() : 
+      ['Logbooks', 'Claim Folders', 'Official Receipts', 'Cash Count Sheets', 'Application Forms (APK)', 'CMS Back-up Files'];
+  } catch (e) {
+    return ['Logbooks', 'Claim Folders', 'Official Receipts', 'Cash Count Sheets', 'Application Forms (APK)', 'CMS Back-up Files'];
+  }
+}
+
+function generateSequentialRefId(sheetName, prefix, poName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  const year = Utilities.formatDate(new Date(), 'GMT+8', 'yyyy');
+  const cleanPo = String(poName || 'General').replace(/[^a-zA-Z0-9]/g, '');
+  const patternPrefix = `${prefix}-${cleanPo}-${year}-`;
+
+  if (!sheet || sheet.getLastRow() < 2) {
+    return `${patternPrefix}001`;
+  }
+
+  const existingIds = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().flat();
+  let maxSeq = 0;
+
+  existingIds.forEach(id => {
+    const strId = String(id || '').trim();
+    if (strId.startsWith(patternPrefix)) {
+      const numPart = parseInt(strId.substring(patternPrefix.length), 10);
+      if (!isNaN(numPart) && numPart > maxSeq) {
+        maxSeq = numPart;
+      }
+    }
+  });
+
+  return `${patternPrefix}${String(maxSeq + 1).padStart(3, '0')}`;
+}
+
+/**
+ * Handles Working Paper Submissions with Aligned In-Row Reference Numbers
+ */
+function submitWorkingPaperBatch(payload) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Working_Paper');
+    const headers = [
+      'Ref ID', 'Date of Monitoring', 'PO Monitored', 'Cluster', 'Region',
+      'Transaction Date From', 'Transaction Date To', 'Particular Findings', 
+      'Details of Findings', 'Monitored By', 'Position', 'Amount', 
+      'Timeframe / Deadline', 'Status', 'Action Taken', 
+      'Date Complied', 'Reference Number', 'Aging (in days)', 'Remarks', 'Monitored Email'
+    ];
+
+    if (!sheet) {
+      sheet = ss.insertSheet('Working_Paper');
+      sheet.appendRow(headers);
+      sheet.getRange('A1:T1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+
+    const items = payload.findings || [];
+    if (items.length === 0) throw new Error("Please enter at least one finding row.");
+
+    const generatedIds = [];
+    const rowsToAdd = [];
+
+    items.forEach(item => {
+      const refId = generateSequentialRefId('Working_Paper', 'WP', payload.poMonitored);
+      generatedIds.push(refId);
+      const nextRow = sheet.getLastRow() + rowsToAdd.length + 1;
+      const agingFormula = `=IF(ISBLANK(M${nextRow}), 0, ROUND(IF(ISBLANK(P${nextRow}), MAX(0, TODAY() - M${nextRow}), MAX(0, P${nextRow} - M${nextRow})), 0))`;
+
+      rowsToAdd.push([
+        refId,
+        payload.dateMonitoring ? new Date(payload.dateMonitoring) : '',
+        payload.poMonitored || '',
+        payload.cluster || '',
+        payload.region || '',
+        payload.dateTransactionFrom ? new Date(payload.dateTransactionFrom) : '',
+        payload.dateTransactionTo ? new Date(payload.dateTransactionTo) : '',
+        item.particularFinding || '',
+        item.details || '',
+        payload.monitoredBy || '',
+        payload.position || '',
+        item.amount ? Number(item.amount) : '',
+        item.deadlineDate ? new Date(item.deadlineDate) : '',
+        'Open',
+        '',
+        '',
+        item.refNumber || '',
+        agingFormula,
+        payload.remarks || '',
+        payload.monitoredEmail || Session.getActiveUser().getEmail()
+      ]);
+    });
+
+    if (rowsToAdd.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, 20).setValues(rowsToAdd);
+      
+      // DISPATCH EMAIL NOTIFICATION TO DEPARTMENT ROSTER & PO STAFF
+      try {
+        if (typeof dispatchFindingNotification === 'function') {
+          dispatchFindingNotification({
+            poMonitored: payload.poMonitored,
+            monitoredBy: payload.monitoredBy,
+            dateMonitoring: payload.dateMonitoring,
+            findings: payload.findings
+          });
+        }
+      } catch (mailErr) {
+        console.warn("Mail trigger non-blocking error: " + mailErr.toString());
+      }
+    }
+
+    return { success: true, count: rowsToAdd.length, refIds: generatedIds };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Handles AMLA Submissions with Automated Notifications
+ */
+function submitAmlaFinding(p) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('AMLA Findings For Compliance T');
+    const headers = [
+      'AMLA Ref ID', 'Date of Monitoring', 'PO Monitored', 'Cluster', 'Region',
+      'CIF', 'Account / Member Name', 'Unit', 'Center', 'Branch', 'Date Recog',
+      'Old APK', 'Legal Dependents Inaccuracy', 'No APK', 'No Proof of Birth',
+      'Incorrect Member Info', 'Incomplete APK vs CMS', 'Un-uploaded APK',
+      'Incomplete Signatures', 'Calculated Demerits', 'Monitored By', 'Position',
+      'Timeframe / Deadline', 'Status', 'Action Taken', 'Date Complied',
+      'Reference Number', 'Aging (in days)', 'Monitored Email'
+    ];
+
+    if (!sheet) {
+      sheet = ss.insertSheet('AMLA Findings For Compliance T');
+      sheet.appendRow(headers);
+      sheet.getRange('A1:AC1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+
+    const members = (p.members && p.members.length > 0) ? p.members : [];
+    if (!members.length) throw new Error("At least one member account must be provided.");
+
+    let grandDemerits = 0;
+    let lastRefId = '';
+    const rowsToAdd = [];
+    const amlaFindingNotifs = [];
+
+    members.forEach(m => {
+      const refId = generateSequentialRefId('AMLA Findings For Compliance T', 'AMLA', p.poMonitored);
+      lastRefId = refId;
+      const nextRow = sheet.getLastRow() + rowsToAdd.length + 1;
+      const agingFormula = `=IF(ISBLANK(W${nextRow}), 0, ROUND(IF(ISBLANK(Z${nextRow}), MAX(0, TODAY() - W${nextRow}), MAX(0, Z${nextRow} - W${nextRow})), 0))`;
+
+      let memberDemerits = 0;
+      const issues = [];
+      if (m.chkOldApk === 'Yes') { memberDemerits += 100; issues.push('Old Form APK'); }
+      if (m.chkLegalDep === 'Yes') { memberDemerits += 200; issues.push('Legal Dependents Inaccuracy'); }
+      if (m.chkNoApk === 'Yes') { memberDemerits += 200; issues.push('No APK'); }
+      if (m.chkNoBirthProof === 'Yes') { memberDemerits += 100; issues.push('No Proof of Birth'); }
+      if (m.chkIncorrectMember === 'Yes') { memberDemerits += 200; issues.push('Incorrect Member Info'); }
+      if (m.chkIncompleteApk === 'Yes') { memberDemerits += 200; issues.push('Incomplete APK vs CMS'); }
+      if (m.chkUnencodedApk === 'Yes') { memberDemerits += 200; issues.push('Un-uploaded APK'); }
+      if (m.chkIncompleteSign === 'Yes') { memberDemerits += 100; issues.push('Incomplete Signatures'); }
+
+      grandDemerits += memberDemerits;
+
+      rowsToAdd.push([
+        refId,
+        p.dateMonitoring ? new Date(p.dateMonitoring) : '',
+        p.poMonitored || '',
+        p.cluster || '',
+        p.region || '',
+        m.cif || '',
+        m.name || '',
+        m.unit || '',
+        m.center || '',
+        m.branch || '',
+        m.dateRecog ? new Date(m.dateRecog) : '',
+        m.chkOldApk || 'No',
+        m.chkLegalDep || 'No',
+        m.chkNoApk || 'No',
+        m.chkNoBirthProof || 'No',
+        m.chkIncorrectMember || 'No',
+        m.chkIncompleteApk || 'No',
+        m.chkUnencodedApk || 'No',
+        m.chkIncompleteSign || 'No',
+        memberDemerits,
+        p.monitoredBy || '',
+        p.position || '',
+        p.deadlineDate ? new Date(p.deadlineDate) : '',
+        'Open',
+        '',
+        '',
+        '',
+        agingFormula,
+        p.monitoredEmail || Session.getActiveUser().getEmail()
+      ]);
+
+      if (issues.length > 0) {
+        amlaFindingNotifs.push({
+          particularFinding: `COMPLIANCE AND RISK - AMLA Account Non-Compliance: ${m.name} (${issues.join(', ')})`,
+          details: `CIF: ${m.cif || 'N/A'}, Unit: ${m.unit || 'N/A'}, Center: ${m.center || 'N/A'}. Demerits: ${memberDemerits} pts.`,
+          amount: 0,
+          deadlineDate: p.deadlineDate || '',
+          refNumber: refId
+        });
+      }
+    });
+
+    if (rowsToAdd.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, 29).setValues(rowsToAdd);
+
+      // Trigger AMLA Alert to Compliance & Risk Roster + Branch Personnel
+      if (amlaFindingNotifs.length > 0 && typeof dispatchFindingNotification === 'function') {
+        try {
+          dispatchFindingNotification({
+            poMonitored: p.poMonitored,
+            monitoredBy: p.monitoredBy,
+            dateMonitoring: p.dateMonitoring,
+            findings: amlaFindingNotifs
+          });
+        } catch (mailErr) {
+          console.warn("AMLA email dispatch warning: " + mailErr.toString());
+        }
+      }
+    }
+
+    return { success: true, count: members.length, refId: lastRefId, demerits: grandDemerits };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Handles Monitoring Activity with Documents Checked Date Range
+ */
+function submitMonitoringActivity(p) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Monitoring_Activities');
+    const headers = [
+      'Activity Ref ID', 'Date of Monitoring', 'Monitoring Team', 'PO Monitored', 
+      'Cluster', 'Region', 'Sample Size / Period', 'Documents Checked Breakdown', 
+      'Unit 1', 'Unit 2', 'Unit 3', 'Unit 4',
+      'Center 1', 'Center 2', 'Center 3', 'Center 4', 
+      'Memos Discussed', 'Other Activities', 'Logged Timestamp'
+    ];
+
+    if (!sheet) {
+      sheet = ss.insertSheet('Monitoring_Activities');
+      sheet.appendRow(headers);
+      sheet.getRange('A1:S1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+
+    const refId = 'ACT-' + Utilities.formatDate(new Date(), 'GMT+8', 'yyyy') + '-' + Math.floor(1000 + Math.random() * 9000);
+
+    const docEntries = p.documentsList || [];
+    const docsSerialized = docEntries.map(d => `${d.sampleCount || '1'} samples: ${d.documentName} [Period: ${d.from || ''} to ${d.to || ''}]`).join('; ');
+
+    sheet.appendRow([
+      refId,
+      p.dateMonitoring ? new Date(p.dateMonitoring) : '',
+      p.monitoringTeam || '',
+      p.poMonitored || '',
+      p.cluster || '',
+      p.region || '',
+      p.sampleSizePeriod || (docEntries.length ? `${docEntries.length} Document Samples` : 'General Sample'),
+      docsSerialized || p.documentsChecked || '',
+      p.unit1 || '',
+      p.unit2 || '',
+      p.unit3 || '',
+      p.unit4 || '',
+      p.center1 || '',
+      p.center2 || '',
+      p.center3 || '',
+      p.center4 || '',
+      p.memosDiscussed || '',
+      p.otherActivities || '',
+      new Date()
+    ]);
+
+    return { success: true, refId: refId };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getFindingsByDepartment(department) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) return { success: true, findings: [] };
+
+    const sheet = ss.getSheetByName('FINDINGS');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { 
+        success: true, 
+        findings: ['Failure to comply with regulatory requirements', 'Operational non-compliance', 'Others / Unclassified'] 
+      };
+    }
+
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+    const findings = [];
+    const targetDept = String(department || '').trim().toUpperCase();
+
+    data.forEach(r => {
+      const deptInSheet = String(r[0] || '').trim().toUpperCase();
+      const findingStatement = String(r[1] || '').trim();
+
+      if (findingStatement && (deptInSheet === targetDept || deptInSheet.includes(targetDept) || targetDept.includes(deptInSheet))) {
+        findings.push(findingStatement);
+      }
+    });
+
+    const uniqueFindings = Array.from(new Set(findings));
+    if (uniqueFindings.length === 0) {
+      uniqueFindings.push(`General ${department} Discrepancy`, 'Others / Unclassified');
+    }
+
+    return { success: true, findings: uniqueFindings };
+  } catch (err) {
+    return { 
+      success: false, 
+      message: err.toString(), 
+      findings: ['Operational finding', 'Others / Unclassified'] 
+    };
+  }
+}

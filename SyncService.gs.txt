@@ -1,0 +1,93 @@
+/**
+ * CARD MBA PMT 2026 - Central Finding Register & Compliance Sync Service
+ */
+
+function updateFindingCompliance(payload) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const refId = String(payload.refId || '').trim();
+    const newStatus = String(payload.status || 'Open').trim();
+    const actionTaken = String(payload.actionTaken || '').trim();
+    const remarks = String(payload.remarks || '').trim();
+    const dateComplied = payload.dateComplied ? new Date(payload.dateComplied) : null;
+    const currentUserEmail = String(payload.currentUserEmail || Session.getActiveUser().getEmail()).trim().toLowerCase();
+    const currentUserRole = String(payload.currentUserRole || 'Auditor').trim().toLowerCase();
+
+    const isWp = refId.startsWith('WP-');
+    const sheetName = isWp ? 'Working_Paper' : 'AMLA Findings For Compliance T';
+    const sheet = ss.getSheetByName(sheetName);
+
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: false, message: `Register sheet not found.` };
+    }
+
+    const data = sheet.getDataRange().getValues();
+    let rowNum = -1;
+    let originatingEmail = '';
+    let currentStatusInSheet = '';
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === refId) {
+        rowNum = i + 1;
+        currentStatusInSheet = String(isWp ? data[i][13] : data[i][23] || 'Open').trim();
+        // Creator email column: Col 20 in WP, Col 29 in AMLA
+        originatingEmail = String(isWp ? (data[i][19] || data[i][9]) : (data[i][28] || data[i][20])).trim().toLowerCase();
+        break;
+      }
+    }
+
+    if (rowNum === -1) {
+      return { success: false, message: `Record ${refId} not found.` };
+    }
+
+    // Role-Based Closure Validation:
+    // Only Admin or Originating Auditor can change status to 'Closed'
+    const isClosing = (newStatus.toLowerCase() === 'close' || newStatus.toLowerCase() === 'closed');
+    const isAdmin = (currentUserRole === 'admin');
+    const isOriginator = (currentUserEmail && originatingEmail && (currentUserEmail === originatingEmail));
+
+    if (isClosing && !isAdmin && !isOriginator) {
+      return {
+        success: false,
+        message: 'Security Violation: Only the originating validator/auditor or a System Administrator can mark this finding as Closed.'
+      };
+    }
+
+    // Workflow Rule Validation: Cannot close without Action Taken and Date Complied
+    if (isClosing) {
+      if (!actionTaken || !dateComplied || isNaN(dateComplied.getTime())) {
+        return {
+          success: false,
+          message: 'Validation Blocked: A finding CANNOT be marked Closed unless both "Action Taken" and "Date Complied" are provided.'
+        };
+      }
+    }
+
+    // Apply Updates to Working Paper
+    if (isWp) {
+      sheet.getRange(rowNum, 14).setValue(newStatus);     // Col 14: Status
+      sheet.getRange(rowNum, 15).setValue(actionTaken);   // Col 15: Action Taken
+      sheet.getRange(rowNum, 16).setValue(dateComplied);  // Col 16: Date Complied
+      if (remarks) sheet.getRange(rowNum, 19).setValue(remarks); // Col 19: Remarks
+    } else {
+      // Apply Updates to AMLA Findings
+      sheet.getRange(rowNum, 24).setValue(newStatus);     // Col 24: Status
+      sheet.getRange(rowNum, 25).setValue(actionTaken);   // Col 25: Action Taken
+      sheet.getRange(rowNum, 26).setValue(dateComplied);  // Col 26: Date Complied
+    }
+
+    SpreadsheetApp.flush();
+    return {
+      success: true,
+      message: `Finding ${refId} updated successfully.`,
+      refId: refId
+    };
+
+  } catch (err) {
+    return { success: false, message: 'Sync Error: ' + err.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}

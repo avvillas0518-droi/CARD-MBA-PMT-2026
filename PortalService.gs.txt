@@ -1,0 +1,155 @@
+/**
+ * CARD MBA PMT 2026 - Central Registers & KPI Provider
+ */
+
+/**
+ * CARD MBA PMT 2026 - Central Registers & KPI Provider (Full Uncapped Sync)
+ */
+function getFindingsRegisters() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error("Active spreadsheet not bound.");
+
+    const wpSheet = ss.getSheetByName('Working_Paper');
+    const amlaSheet = ss.getSheetByName('AMLA Findings For Compliance T');
+
+    const wpRecords = [];
+    if (wpSheet && wpSheet.getLastRow() > 1) {
+      const lastRow = wpSheet.getLastRow();
+      const lastCol = Math.max(wpSheet.getLastColumn(), 20);
+      const rows = wpSheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+      // Read ALL rows (no slicing)
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const r = rows[i];
+        if (r[0]) {
+          wpRecords.push({
+            refId: String(r[0] || '').trim(),
+            dateMonitoring: formatSafeDate(r[1]),
+            po: String(r[2] || '').trim(),
+            cluster: String(r[3] || '').trim(),
+            region: String(r[4] || '').trim(),
+            dateTransactionFrom: formatSafeDate(r[5]),
+            dateTransactionTo: formatSafeDate(r[6]),
+            particular: String(r[7] || '').trim(),
+            details: String(r[8] || '').trim(),
+            monitoredBy: String(r[9] || '').trim(),
+            position: String(r[10] || '').trim(),
+            amount: r[11] ? Number(r[11]).toLocaleString() : '0',
+            timeframe: formatSafeDate(r[12]) || String(r[12] || '-'),
+            status: String(r[13] || 'Open').trim(),
+            actionTaken: String(r[14] || '').trim(),
+            dateComplied: formatSafeDate(r[15]),
+            refNumber: String(r[16] || '').trim(),
+            aging: Number(r[17]) || 0,
+            remarks: String(r[18] || '').trim(),
+            originatingEmail: String(r[19] || '').trim().toLowerCase()
+          });
+        }
+      }
+    }
+
+    const amlaRecords = [];
+    if (amlaSheet && amlaSheet.getLastRow() > 1) {
+      const lastRow = amlaSheet.getLastRow();
+      const lastCol = Math.max(amlaSheet.getLastColumn(), 29);
+      const aRows = amlaSheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+      // Read ALL rows (no slicing)
+      for (let i = aRows.length - 1; i >= 0; i--) {
+        const r = aRows[i];
+        if (r[0]) {
+          amlaRecords.push({
+            refId: String(r[0] || '').trim(),
+            dateMonitoring: formatSafeDate(r[1]),
+            po: String(r[2] || '').trim(),
+            cluster: String(r[3] || '').trim(),
+            region: String(r[4] || '').trim(),
+            cif: String(r[5] || '').trim(),
+            member: String(r[6] || '').trim(),
+            unit: String(r[7] || '').trim(),
+            center: String(r[8] || '').trim(),
+            branch: String(r[9] || '').trim(),
+            dateRecog: formatSafeDate(r[10]),
+            particular: 'AMLA: ' + String(r[6] || 'Account Case'),
+            demerits: Number(r[19]) || 0,
+            monitoredBy: String(r[20] || '').trim(),
+            position: String(r[21] || '').trim(),
+            timeframe: formatSafeDate(r[22]) || String(r[22] || '-'),
+            status: String(r[23] || 'Open').trim(),
+            actionTaken: String(r[24] || '').trim(),
+            dateComplied: formatSafeDate(r[25]),
+            refNumber: String(r[26] || '').trim(),
+            aging: Number(r[27]) || 0,
+            originatingEmail: String(r[28] || '').trim().toLowerCase()
+          });
+        }
+      }
+    }
+
+    return { 
+      success: true, 
+      workingPaper: wpRecords, 
+      amla: amlaRecords,
+      totalCount: wpRecords.length + amlaRecords.length
+    };
+  } catch (err) {
+    return { success: false, message: 'PortalService Error: ' + err.toString(), workingPaper: [], amla: [] };
+  }
+}
+
+function formatSafeDate(val) {
+  if (!val) return '';
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return Utilities.formatDate(val, 'GMT+8', 'yyyy-MM-dd');
+  }
+  return String(val).trim();
+}
+
+function formatSafeDate(val) {
+  if (!val) return '';
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return Utilities.formatDate(val, 'GMT+8', 'yyyy-MM-dd');
+  }
+  return String(val).trim();
+}
+
+/**
+ * Retrieves the full historical registry of Field Monitoring Activities
+ */
+function getMonitoringActivitiesRegistry() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Monitoring_Activities');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: true, activities: [] };
+    }
+
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getValues();
+    const list = [];
+
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      if (r[0]) {
+        list.push({
+          refId: String(r[0] || '').trim(),
+          dateMonitoring: formatSafeDate(r[1]),
+          monitoringTeam: String(r[2] || '').trim(),
+          po: String(r[3] || '').trim(),
+          cluster: String(r[4] || '').trim(),
+          region: String(r[5] || '').trim(),
+          unitBoat: String(r[6] || '').trim(),
+          sampleSize: String(r[7] || '').trim(),
+          documentsChecked: String(r[8] || '').trim(),
+          centers: [r[9], r[10], r[11], r[12]].filter(Boolean).map(c => String(c).trim()).join(', '),
+          memosDiscussed: String(r[13] || '').trim(),
+          otherActivities: String(r[14] || '').trim()
+        });
+      }
+    }
+
+    return { success: true, activities: list };
+  } catch (e) {
+    return { success: false, message: e.toString(), activities: [] };
+  }
+}

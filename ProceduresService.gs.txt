@@ -1,0 +1,108 @@
+/**
+ * CARD MBA PMT 2026 - Monitoring Procedures Guide Service
+ */
+
+function getMonitoringProceduresList() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Monitoring Procedures');
+
+    // Auto-seed if sheet does not exist or only contains headers
+    if (!sheet || sheet.getLastRow() < 2) {
+      seedMonitoringProceduresSheet();
+      sheet = ss.getSheetByName('Monitoring Procedures');
+    }
+
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
+    const procedures = data.map((r, idx) => ({
+      id: idx + 1,
+      area: String(r[0] || '').trim(),
+      particular: String(r[1] || '').trim(),
+      documents: String(r[2] || '').trim(),
+      procedure: String(r[3] || '').trim(),
+      remarks: String(r[4] || '').trim(),
+      classification: String(r[5] || 'Major').trim()
+    })).filter(p => p.particular && p.procedure);
+
+    return {
+      success: true,
+      procedures: procedures,
+      areas: Array.from(new Set(procedures.map(p => p.area))).sort()
+    };
+  } catch (err) {
+    return { success: false, message: err.toString(), procedures: [], areas: [] };
+  }
+}
+
+/**
+ * Master catalog seeder derived from the official CARD MBA PO Monitoring Procedure Manual
+ */
+function seedMonitoringProceduresSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Monitoring Procedures');
+  if (!sheet) sheet = ss.insertSheet('Monitoring Procedures');
+  
+  sheet.clear();
+  sheet.appendRow(['Area / Department', 'Particular', 'Document/s to Check', 'Procedure/s', 'Remarks / Instructions', 'Classification']);
+  sheet.getRange('A1:F1').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold');
+
+  const catalog = [
+    // COMPLIANCE
+    ['Compliance', "Mayor's Permit and Licenses", 'NF 1-Business Permit & Licenses Documents', "Check complete filing of the Mayor's Permit since the PO was established.", 'The latest should be displayed in the office but should have a photocopy filed in the folder.', 'Major'],
+    ['Compliance', 'IC Licenses', 'NF 4-Copy of IC Licenses', 'Check complete filing of IC License since the PO was established.', 'The latest should be displayed in the office but should have a photocopy filed in the folder.', 'Major'],
+    ['Compliance', 'SEC Documents', 'NF 4-SEC Documents', 'Check if the PO has a file of Amended Articles of Incorporation (2018); Amended By-Laws (2018) and latest SEC General Information Sheet (GIS).', 'Ensure copies are duly received by SEC.', 'Major'],
+    ['Compliance', 'BIR Documents', 'NF 5-BIR Documents', 'Check complete filing of BIR 2307 as proof of tax withheld remitted by Main Office. Check latest BIR 0605 and BIR 2303.', 'Latest BIR 0605 (with deposit/OR) and BIR 2303 should be displayed along with the "Ask For Receipt" decal.', 'Major'],
+    ['Compliance', 'DOLE Documents', 'NF 6-DOLE Documents', 'Check complete filing of the latest DOLE Registry of Establishment, Productivity Improvement 13th Month Pay, Annual Medical, Safety Committee Organization, Annual Work Accident Illness (WAIR).', 'Adhere to DOLE Advisory 2020-17.', 'Major'],
+    ['Compliance', 'Data Privacy / AMLA', 'APK Files', 'Check if APK used by PO is updated and includes data privacy consent. Verify if APK of resigned members for past 5 years are segregated for disposal.', 'Segregate inactive member files strictly.', 'Major'],
+    ['Compliance', 'Board Resolutions', 'NF 3-Board Resolutions', 'Check if the PO has a file of the latest copy of Board Resolutions.', 'Ensure all approved policies are filed.', 'Major'],
+    ['Compliance', 'Contract of Lease', 'NF 2-Contract of Lease', 'Check if PO has latest Contract of Lease, expiry dates, and payment of Documentary Stamp Tax (DST) on execution.', 'If expiring in the coming month, coordinate renewal status with PM. DST payment must be attached.', 'Major'],
+    ['Compliance', 'Vehicle Registration', 'Vehicle Documents (OR/CR & CTPL)', 'Check if PO has copies of latest LTO OR/CR and valid CTPL insurance coverage for all service vehicles.', 'A copy must always be kept inside the vehicle and filed in the PO.', 'Major'],
+
+    // ACCOUNTING
+    ['Accounting', 'Computerized Accounting System', 'Certificate of CAS & Book of Accounts', 'Check if Book of Accounts is BIR stamped updated as of July 2020. Check copy of Certificate of CAS.', 'Maintain printed copy of Certificate on file.', 'Major'],
+    ['Accounting', 'Official Receipts', 'Official Receipts Booklet', 'Check if issued ORs are distributed to respective Units/Clients. Check all un-used ORs kept in safe vault, valid with BIR, and cancelled ORs intact.', 'Check completeness of all triplicate and cancelled ORs.', 'Major'],
+    ['Accounting', 'Financial Report', 'F5-Financial Statements', 'Secure filing of Accounting month-end reports (Cash Receipt Journal, Cash Disbursement Journal, General Journal, and General Ledger).', 'Ensure printed reports are ready right after EDD of the month.', 'Major'],
+    ['Accounting', 'Financial Statement & Supporting Schedule', 'FS and Supporting Schedules', 'Check completeness of FS for current year. Verify supporting balance sheet schedules reconcile with attached balances and signatures.', 'All schedules must have complete signatures.', 'Major'],
+    ['Accounting', 'Cash Advance', 'Schedule of Cash Advance', 'Check if all cash advances are liquidated on time (within 3 working days from date of last transaction) by inspecting arrival and liquidation dates.', 'Amount must be within approved policy limits depending on staff level.', 'Major'],
+    ['Accounting', 'Accounts Receivable', 'Schedule of AR & F9-Billing Statements', 'Check completeness and accuracy of AR schedule. Verify staff-accountable balances and ensure billing statements are acknowledged.', 'Help PO coordinate with AM/RD for long overdue receivables.', 'Minor'],
+    ['Accounting', 'Accounts Payable', 'Schedule of Accounts Payable', 'Check completeness and accuracy of payable schedules.', 'Payables are controlled by the PO staff; no long-due items allowed.', 'Minor'],
+    ['Accounting', 'Property, Plant and Equipment (PPE)', 'Schedule of PPE', 'Check accumulated depreciation expense against asset useful life. Conduct physical count of assets in PO.', 'All functioning fully-depreciated assets must carry a value of ₱1.00.', 'Minor'],
+    ['Accounting', 'Cash Receipt & Disbursement', 'F1-Receipts & F2-Disbursements', 'Compare Daily Check Receipt Summary against ORs. Inspect Daily Check Disbursement Summary against vouchers; verify "PAID" stamp.', 'Official Receipts must have all required information shown therein.', 'Minor'],
+    ['Accounting', 'Cash in Bank & Position', 'F4-Daily Cash Position & Passbook', 'Verify Daily Cash Position against projections. Check if PO transfers excess bank balance to Main Office. Inspect physical custody of passbooks.', 'Passbooks must always be kept inside the safe vault when not in use.', 'Minor'],
+    ['Accounting', 'Supplies Inventory', 'I1-Supplies Logbook', 'Conduct physical inventory count of supplies logged and reconcile against logbook and balance sheet.', 'Lacking items must be logged in the Lacking Documents Logbook.', 'Minor'],
+
+    // CLAIMS
+    ['Claims', 'Claims Concern', 'Claims Concern Logbook', 'Check if all member concerns have documented action taken and are properly updated on the logbook.', 'All pending concerns must be addressed promptly.', 'Major'],
+    ['Claims', 'Denied Claims', 'NF 10-Denied Claims & CMS', 'Generate list of denied claims in CMS. Verify complete attachments (CSS, denial letter, or center resolution with beneficiary confirmation).', 'CM/DDO must review CMS and hardcopy documents.', 'Major'],
+    ['Claims', 'Refused Claims', 'NF 11-Refused Claims & CMS', 'Check complete attachments (narrative or center resolution confirming member refusal of claim). Compare details against CMS.', 'Beneficiary acknowledgment must be attached.', 'Major'],
+    ['Claims', 'Pending Claims', 'NF 12-Pending Claims', 'Inspect conditional denial report and filed pending claims. Verify regular follow-up with claimant to complete requirements.', 'Reconcile refund/claims amounts with Financial Statements.', 'Major'],
+    ['Claims', 'Total Permanent Disability (TPD)', 'NF 13-TPD', 'Check if all filed TPD claims have complete attachments and if 5th month home visits were conducted.', 'Cross-reference claimant and beneficiary details with CMS.', 'Major'],
+    ['Claims', 'Claims Audit & Refund of Contributions', 'F8-Claims Documents & F6-Remittance', 'Generate monthly audit of claims. Verify Authority to Deposit and proof of credit to member pledge/savings accounts.', 'Credit advice required for bank institutions; manual entry for CARD, Inc.', 'Major'],
+
+    // DCC & UNDERWRITING
+    ['DCC & Underwriting', 'On-site / Off-site Back-up', 'I5-Back-up Logbook & Hard Drive', 'Verify with MO DCC if monthly offsite backup is sent. Inspect onsite backup logbook and external drive.', 'All backup files must be password-encrypted.', 'Minor'],
+    ['DCC & Underwriting', 'Certificate of Membership (COM)', 'Unit Folder per Area & Receiving Copies', 'Check delivery within 15 working days from receipt. Check receiver and PM signatures. Verify member receipt during unit visits.', 'Check that members have physically received their COM.', 'Minor'],
+    ['DCC & Underwriting', 'Liham-Paalala', 'Unit Folder per Area & Receiving Copy', 'Compare list of lapsed members from DCC with issued Liham-Paalala. Verify APK updating.', 'Ensure lapsed members filled out necessary APK updates.', 'Minor'],
+    ['DCC & Underwriting', 'Aplikasyon ng Pagiging Kasapi (APK)', 'NF 21-APK & CMS', 'Check physical filing of APKs and verify if PO staff encodes APKs based on daily production targets.', 'Verify encoding timeliness in CMS.', 'Minor'],
+    ['DCC & Underwriting', 'GLIP & Coordinator Profiles', 'GLIP NOR & NF 7-Coordinators Profile', 'Inspect Notice of Retirement for members turning 69. Check that units with 300+ members have qualified coordinators.', 'Coordinate immediately with AM/RD if units lack coordinators.', 'Minor'],
+    ['DCC & Underwriting', 'Customized Back-up', 'CMS Back-up Portal', 'Check CMS if PO uploads customized back-up from Area every week.', 'Uploads must strictly adhere to weekly schedules.', 'Minor'],
+
+    // IT
+    ['IT', 'User Access in CMS', 'CMS User List vs PO Roster', 'Get list of authorized CMS users from IT and compare against physical staff assigned to the PO.', 'Unauthorized accounts must be reported for deactivation.', 'Major'],
+    ['IT', 'Unauthorized Files & Browsing', 'Workstation Storage & History', 'Search for .mp3, .mp4, .mkv, .exe, .avi on workstations. Check browser history for restricted sites.', 'Report non-work-related media and restricted URLs to IT.', 'Major'],
+    ['IT', 'Sharing of User Accounts', 'CMS Logs & Attendance DTR', 'Audit sample transactions approved in CMS while PM or BK is on leave or in the field.', 'Sharing accounts violates IT security policy.', 'Major'],
+    ['IT', 'Lockdown Configuration', 'Control Panel & USB Settings', 'Test removable USB drives (must be disabled on all PCs except BK). Verify screensaver lock and Windows Update set to manual.', 'All USB drives must be disabled except for Bookkeeper.', 'Major'],
+    ['IT', 'Workstation Hygiene & Antivirus', 'Programs & McAfee Console', 'Verify only CARD MBA-owned PCs are used. Confirm McAfee security updates reflect current date. Check for unapproved software.', 'External backup drives must be readable and uncorrupted.', 'Major'],
+    ['IT', 'File Sharing & MOR Assets', 'Network Sharing & MOR Register', 'Verify folders are not shared across LAN (only printers allowed). Check workstation inventory stickers against MOR.', 'Network sharing must be restricted.', 'Major'],
+
+    // OTHERS / GENERAL OPERATIONS
+    ['Operations', 'Staff Productivity & Report Card', 'NF 17-Report Card', 'Inspect staff productivity report cards and demerits. Coach staff on strategies to hit targets.', 'Provide coaching for lagging targets.', 'Minor'],
+    ['Operations', 'Plan of Work & Daily Recital', 'Whiteboard & NF 16-Daily Recital', 'Ensure monthly Plan of Work is updated on whiteboard. Verify daily recital checklist is completed at end of day.', 'Daily recital must be conducted before leaving.', 'Minor'],
+    ['Operations', 'PM Monthly Report & DTR', 'PM Monthly Report & Security Logbook', 'Analyze PM Monthly Report. Check staff DTRs (reflecting 8-5 schedule) and compare with Security Guard logbook.', 'Actual overtime/time-out must reflect on Security Logbook.', 'Minor'],
+    ['Operations', 'Meetings & Field Visits', 'Logbooks L9, L10 & Center Checklist', 'Verify weekly staff meetings and monthly coordinator meetings. Validate unit and center visits against staff targets.', 'Review meeting minutes and resolutions.', 'Minor'],
+    ['Operations', 'Marketing Collaterals', 'Office Displays', 'Verify microinsurance posters, notices, and promotional collateral are properly displayed.', 'Ensure public notices are visible.', 'Minor']
+  ];
+
+  sheet.getRange(2, 1, catalog.length, 6).setValues(catalog);
+  sheet.autoResizeColumns(1, 6);
+}

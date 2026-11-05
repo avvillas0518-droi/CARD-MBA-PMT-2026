@@ -1,0 +1,124 @@
+/**
+ * CARD MBA - Program Monitoring Tool (PMT) 2026
+ * Core Controller, Routing, and Triggers
+ */
+
+function doGet(e) {
+  return HtmlService.createHtmlOutputFromFile('Sidebar')
+    .setTitle('CARD MBA - PMT Portal')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function onOpen(e) {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    ui.createMenu('PMT System')
+      .addItem('🔐 Launch PMT Web Portal (Modal)', 'openPortalModal')
+      .addItem('📝 Log Audit Finding (Sidebar)', 'openWorkingPaperSidebar')
+      .addItem('🛡️ Log AMLA Finding (Sidebar)', 'openAmlaSidebar')
+      .addSeparator()
+      .addSubMenu(ui.createMenu('📊 View Ledgers & Registers')
+      .addItem('Working Paper Register', 'navToWorkingPaper')
+      .addItem('AMLA Findings Register', 'navToAmlaFindings')
+      .addItem('Executive Dashboard', 'navToDashboard')
+      .addItem('Summary of Demerits', 'navToDemerits')
+      .addItem('📘 Monitoring Procedures Manual', 'navToProcedures') // <-- Insert here
+      )
+      .addSubMenu(ui.createMenu('⚙️ Settings & Dropdowns')
+        .addItem('Manage Dropdowns', 'navToDropdowns')
+        .addItem('Master Findings Library', 'navToFindingsLibrary')
+        .addSeparator()
+        .addItem('🎲 Seed 1,050+ Mock Records (Proposal Dataset)', 'runMockDataSeeding') // <-- Add this
+        .addItem('🔓 Admin: Unlock Settings Sheets', 'unlockMasterSheets')
+        .addItem('🔒 Admin: Protect Master Sheets', 'protectMasterSheets')
+      )
+      .addSeparator()
+      .addSubMenu(ui.createMenu('📑 Reports & Exports')
+        .addItem('Generate Executive PDF Report', 'runPdfReportGeneration')
+        .addItem('Export Working Paper to CSV', 'exportWorkingPaperCsv')
+        .addItem('Send Overdue Digest (Manual Run)', 'runOverdueNotificationScan')
+      )
+      .addSeparator()
+      .addItem('⚡ Recalculate Aging & Demerits', 'runRecalculateAll')
+      .addToUi();
+  } catch (err) {
+    console.error('onOpen failed: ' + err.toString());
+  }
+}
+
+function openPortalModal() {
+  const html = HtmlService.createHtmlOutputFromFile('Sidebar')
+    .setTitle('CARD MBA PMT 2026 - Portal')
+    .setWidth(1200)
+    .setHeight(800);
+  SpreadsheetApp.getUi().showModalDialog(html, 'CARD MBA - Institutional Monitoring System');
+}
+
+function navToProcedures() { 
+  setActiveSheetByName('Monitoring Procedures'); 
+}
+
+function openWorkingPaperSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile('Sidebar')
+    .setTitle('CARD MBA - Log Audit Finding')
+    .setWidth(450);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function openAmlaSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile('Sidebar')
+    .setTitle('CARD MBA - Log AMLA Finding')
+    .setWidth(450);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+// Navigation Shortcuts
+function navToWorkingPaper()    { setActiveSheetByName('Working_Paper'); }
+function navToAmlaFindings()    { setActiveSheetByName('AMLA Findings For Compliance T'); }
+function navToDashboard()       { setActiveSheetByName('Executive Dashboard'); }
+function navToDemerits()        { setActiveSheetByName('Summary of Demerits'); }
+function navToDropdowns()       { setActiveSheetByName('Dropdowns'); }
+function navToFindingsLibrary() { setActiveSheetByName('FINDINGS'); }
+
+function setActiveSheetByName(name) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) return;
+  const sheet = ss.getSheetByName(name);
+  if (sheet) {
+    ss.setActiveSheet(sheet);
+  } else {
+    SpreadsheetApp.getUi().alert(`Sheet "${name}" not found. Please verify workbook tabs.`);
+  }
+}
+
+function runRecalculateAll() {
+  const res = recalculateAllData();
+  SpreadsheetApp.getUi().alert(res.message);
+}
+
+function runPdfReportGeneration() {
+  const res = generateExecutiveReportPdf();
+  SpreadsheetApp.getUi().alert(res.success ? 'Report ready: ' + res.url : 'Failed: ' + res.message);
+}
+
+function runOverdueNotificationScan() {
+  const res = scanAndSendWeeklyDigest();
+  SpreadsheetApp.getUi().alert(res.message);
+}
+
+function exportWorkingPaperCsv() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Working_Paper');
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('Working_Paper tab does not exist.');
+    return;
+  }
+  const rows = sheet.getDataRange().getValues();
+  let csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const file = DriveApp.createFile(`Working_Paper_${Utilities.formatDate(new Date(), 'GMT+8', 'yyyyMMdd_HHmm')}.csv`, csv, MimeType.CSV);
+  SpreadsheetApp.getUi().alert('Export created in Drive: ' + file.getUrl());
+}
+function runMockDataSeeding() {
+  seedCompleteMockDataset();
+}

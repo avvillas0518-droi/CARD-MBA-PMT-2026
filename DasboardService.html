@@ -1,0 +1,73 @@
+/**
+ * CARD MBA PMT 2026 - Executive Dashboard Generator
+ * Synchronized with FormService 18-column Working Paper and 27-column AMLA schema
+ */
+function buildExecutiveDashboardSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let dash = ss.getSheetByName('Executive Dashboard');
+  
+  if (!dash) {
+    dash = ss.insertSheet('Executive Dashboard', 0);
+  }
+
+  dash.clear();
+  dash.setGridlines(false);
+
+  // Set Column Widths
+  dash.setColumnWidth(1, 20);  // Margin
+  dash.setColumnWidth(2, 170); // Metric Label
+  dash.setColumnWidth(3, 110); // Metric Value
+  dash.setColumnWidth(4, 30);  // Spacer
+  dash.setColumnWidth(5, 180);
+  dash.setColumnWidth(6, 110);
+  dash.setColumnWidth(7, 30);
+  dash.setColumnWidth(8, 180);
+  dash.setColumnWidth(9, 110);
+
+  // Title Block
+  dash.getRange('B2:I2').merge()
+    .setValue('CARD MUTUAL BENEFIT ASSOCIATION, INC.')
+    .setFontSize(14).setFontWeight('bold').setFontColor('#0F4C3A');
+  dash.getRange('B3:I3').merge()
+    .setValue('PMT 2026 - EXECUTIVE AUDIT & COMPLIANCE DASHBOARD')
+    .setFontSize(11).setFontColor('#566573');
+
+  // KPI Block 1: Total Findings (Working Paper Col A: Ref ID)
+  dash.getRange('B5:C5').merge().setValue('TOTAL FINDINGS').setBackground('#0F4C3A').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  dash.getRange('B6:C6').merge().setFormula('=COUNTA(Working_Paper!A2:A)').setFontSize(20).setFontWeight('bold').setHorizontalAlignment('center').setBackground('#E8F8F5');
+
+  // KPI Block 2: Open Findings (Working Paper Col M: Status)
+  dash.getRange('E5:F5').merge().setValue('OPEN FINDINGS').setBackground('#78281F').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  dash.getRange('E6:F6').merge().setFormula('=COUNTIF(Working_Paper!M2:M, "Open")').setFontSize(20).setFontWeight('bold').setHorizontalAlignment('center').setFontColor('#900C3F').setBackground('#FDEDEC');
+
+  // KPI Block 3: Closed Findings (Working Paper Col M: Status)
+  dash.getRange('H5:I5').merge().setValue('RESOLVED / CLOSED').setBackground('#145A32').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  dash.getRange('H6:I6').merge().setFormula('=COUNTIF(Working_Paper!M2:M, "Close")').setFontSize(20).setFontWeight('bold').setHorizontalAlignment('center').setFontColor('#1E8449').setBackground('#EAFAF1');
+
+  // KPI Block 4: Overdue Items (>90 Days) (Working Paper Col Q: Aging)
+  dash.getRange('B8:C8').merge().setValue('OVERDUE (>90 DAYS)').setBackground('#B03A2E').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  dash.getRange('B9:C9').merge().setFormula('=COUNTIF(Working_Paper!Q2:Q, ">90")').setFontSize(20).setFontWeight('bold').setHorizontalAlignment('center').setFontColor('#C0392B').setBackground('#FDEDEC');
+
+  // KPI Block 5: Demerit Points (Working Paper Col K: Amount + AMLA Col S: Demerits)
+  dash.getRange('E8:F8').merge().setValue('TOTAL DEMERITS').setBackground('#6C3483').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  dash.getRange('E9:F9').merge().setFormula('=SUM(Working_Paper!K2:K) + SUM(\'AMLA Findings For Compliance T\'!S2:S)').setFontSize(20).setFontWeight('bold').setHorizontalAlignment('center').setBackground('#F4ECF7');
+
+  // KPI Block 6: Resolution Rate % (H6 Closed / B6 Total)
+  dash.getRange('H8:I8').merge().setValue('RESOLUTION RATE').setBackground('#117864').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  dash.getRange('H9:I9').merge().setFormula('=IF(B6>0, H6/B6, 0)').setNumberFormat('0.0%').setFontSize(20).setFontWeight('bold').setHorizontalAlignment('center').setBackground('#E8F8F5');
+
+  // Departmental Breakdown Table (Working Paper Col G: Particular Findings)
+  dash.getRange('B12:C12').merge().setValue('Findings by Department').setFontWeight('bold').setBackground('#D5D8DC');
+  const depts = [
+    'COMPLIANCE AND RISK', 'ACCOUNTING', 'CLAIMS', 'UNDERWRITING', 'IT', 
+    'DCC', 'BOAT', 'MBA COORDINATOR', 'ACCOUNTS AND RECORDS', 'PERSONNEL FILE'
+  ];
+
+  depts.forEach((dept, idx) => {
+    const row = 13 + idx;
+    dash.getRange(row, 2).setValue(dept);
+    dash.getRange(row, 3).setFormula(`=COUNTIF(Working_Paper!G2:G, "*${dept}*")`);
+  });
+
+  SpreadsheetApp.getUi().alert('Executive Dashboard initialized successfully.');
+}
